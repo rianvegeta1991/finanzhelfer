@@ -444,7 +444,9 @@ function zeichneDepot(){
       }).join('') + '</div></div>';
   });
 
-  const ohneSymbol = db.positionen.filter((p) => !String(p.symbol || '').trim()).length;
+  // Nur bei selbst gepflegten Positionen ist ein fehlendes Kürzel ein Problem –
+  // was von der Brücke kommt, bringt seinen Kurs schon mit.
+  const ohneSymbol = db.positionen.filter((p) => !String(p.symbol || '').trim() && !ausBruecke(p)).length;
   if (ohneSymbol){
     html += '<div class="kasten"><b>' + ohneSymbol + ' Position' + (ohneSymbol === 1 ? '' : 'en') + ' ohne Börsenkürzel</b>' +
       'Ohne Kürzel (z. B. <code>EUNL.DE</code>) lässt sich der Kurs nicht automatisch holen – der von Hand ' +
@@ -887,9 +889,13 @@ function zeichneMehr(){
       'rel="noopener">Finanzhelfer-Brücke</a>.</p>' +
       feldHtml('Adresse der Brücke', eingabe('br-basis', bruecke.basis, 'url', 'https://…')) +
       feldHtml('Token', eingabe('br-token', bruecke.token, 'password', 'Bearer-Token')) +
-      '<div class="btn-reihe"><button class="btn zweit" id="br-test">Verbindung prüfen</button>' +
-      '<button class="btn" id="br-ok">Speichern</button></div>' +
-      '<div id="br-ergebnis"></div></div>';
+      schalterHtml('br-auto', 'Beim Start selbst abrufen',
+        'Sobald die App von der Brücke ausgeliefert wird, verbindet sie sich allein, legt fehlende ' +
+        'Konten an und holt den aktuellen Stand.', db.einst.autoAbruf !== false) +
+      '<div class="btn-reihe" style="margin-top:12px"><button class="btn zweit" id="br-test">Verbindung prüfen</button>' +
+      '<button class="btn" id="br-ok">Speichern</button>' +
+      (db.einst.bruecke && db.einst.bruecke.basis ? '<button class="btn zweit" id="br-jetzt">Jetzt abrufen</button>' : '') +
+      '</div><div id="br-ergebnis"></div></div>';
 
     /* Marktdaten */
     html += '<div class="karte"><div class="karte-kopf"><h2>Marktdaten</h2>' +
@@ -967,7 +973,21 @@ function zeichneMehr(){
     /* Verdrahtung */
     el('br-ok').onclick = () => {
       db.einst.bruecke = { basis: wert('br-basis'), token: wert('br-token') };
+      db.einst.autoAbruf = angehakt('br-auto');
       sichern(); toast('Gespeichert');
+    };
+    if (el('br-jetzt')) el('br-jetzt').onclick = async () => {
+      const knopf = el('br-jetzt');
+      knopf.disabled = true; knopf.textContent = 'Rufe ab …';
+      const b = await brueckeAlleHolen();
+      neuZeichnen();
+      if (b && b.fehler.length){
+        infoZeigen('Abruf teils fehlgeschlagen',
+          '<p class="klein">' + b.neu + ' neue Buchungen, ' + b.positionen + ' Positionen.</p>' +
+          '<ul class="klein leise">' + b.fehler.map((f) => '<li>' + h(f) + '</li>').join('') + '</ul>');
+      } else if (b){
+        toast(b.neu + ' neue Buchungen, ' + b.positionen + ' Positionen');
+      }
     };
     el('br-test').onclick = async () => {
       const cfg = { basis: wert('br-basis'), token: wert('br-token') };

@@ -45,6 +45,58 @@ const BANK_DIENSTE = [
   { id:'manuell', name:'Nur von Hand',         hinweis:'Saldo und Buchungen selbst pflegen' }
 ];
 
+/* ---------- Selbsteinrichtung ----------
+ * Wird die App von der Brücke selbst ausgeliefert, muss man Adresse, Token
+ * und Kennungen nicht abtippen: sie liegen ja schon auf demselben Rechner.
+ * `GET /selbst` verrät sie – nur an dieselbe Herkunft, siehe main.rs.
+ *
+ * Läuft bei jedem Start, legt aber nur an, was fehlt (verglichen über die
+ * Kennung). Ein zweiter Aufruf ändert deshalb nichts. */
+async function brueckeSelbstEinrichten(){
+  let auskunft;
+  try {
+    const a = await fetch('/selbst', { cache:'no-store' });
+    if (!a.ok) return null;
+    auskunft = await a.json();
+  } catch (e){
+    return null;   // keine Brücke dahinter – völlig normal
+  }
+  if (!auskunft || !auskunft.token) return null;
+
+  const neu = { verbunden:false, konten:[], depots:[] };
+
+  const bisher = db.einst.bruecke || {};
+  if (bisher.basis !== location.origin || bisher.token !== auskunft.token){
+    db.einst.bruecke = { basis: location.origin, token: auskunft.token };
+    neu.verbunden = true;
+  }
+
+  (auskunft.konten || []).forEach((k) => {
+    if (db.konten.some((x) => x.dienst === 'bruecke' && x.apiRef === k.ref)) return;
+    db.konten.push({
+      id: neueId(), name: k.name, bank: k.bank, iban:'',
+      art: KONTOART_MAP[k.art] ? k.art : 'giro',
+      waehrung:'EUR', saldo:0, saldoStand: heute(),
+      dienst:'bruecke', apiRef: k.ref,
+      farbe: DEPOT_FARBEN[db.konten.length % DEPOT_FARBEN.length]
+    });
+    neu.konten.push(k.name);
+  });
+
+  (auskunft.depots || []).forEach((d) => {
+    if (db.depots.some((x) => x.dienst === 'bruecke' && x.apiRef === d.ref)) return;
+    db.depots.push({
+      id: neueId(),
+      name: d.art === 'depot' ? d.name : 'Depot ' + d.name,
+      broker: d.bank || d.name, dienst:'bruecke', apiRef: d.ref
+    });
+    neu.depots.push(d.name);
+  });
+
+  if (neu.verbunden || neu.konten.length || neu.depots.length) sichern();
+  return neu;
+}
+
 /* ---------- Brücke ---------- */
 
 async function brueckeHolen(cfg, pfad, params){
@@ -129,6 +181,36 @@ async function alleAbgleichen(){
     } catch (e){
       bericht.fehler.push(k.name + ': ' + e.message);
     }
+  }
+  return bericht;
+}
+
+/* Alles holen, was an der Brücke hängt – Konten wie Depots, still im
+ * Hintergrund. Fehler landen in der Konsole statt in einem Fenster: beim
+ * Start soll niemand einen Dialog wegklicken müssen, nur weil die Brücke
+ * gerade nicht erreichbar ist. */
+async function brueckeAlleHolen(){
+  const cfg = db.einst.bruecke;
+  if (!cfg || !cfg.basis) return null;
+  const bericht = { neu:0, positionen:0, fehler:[] };
+
+  for (const k of db.konten.filter((x) => x.dienst === 'bruecke')){
+    try {
+      const erg = await kontoAbgleichen(k);
+      bericht.neu += erg.neu;
+    } catch (e){ bericht.fehler.push(k.name + ': ' + e.message); }
+  }
+  for (const d of db.depots.filter((x) => x.dienst === 'bruecke')){
+    try {
+      const erg = await depotAbgleichen(d);
+      bericht.positionen += erg.neu + erg.erneuert;
+    } catch (e){ bericht.fehler.push(d.name + ': ' + e.message); }
+  }
+
+  if (bericht.fehler.length) console.warn('[Brücke]', bericht.fehler.join(' | '));
+  if (bericht.neu || bericht.positionen){
+    sichern();
+    if (typeof neuZeichnen === 'function') neuZeichnen();
   }
   return bericht;
 }

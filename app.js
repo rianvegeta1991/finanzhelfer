@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.3';
+const APP_VERSION = '1.5';
 
 const el = (id) => document.getElementById(id);
 function h(s){
@@ -679,6 +679,19 @@ function starten(){
 function nachDemOeffnen(){
   letzteAktion = Date.now();
   zeigeAnsicht(db.einst.startAnsicht || 'ueberblick');
+
+  // Kommt die App von einer Brücke, richtet sie sich selbst ein und holt
+  // gleich ab. Ohne Brücke dahinter passiert schlicht nichts.
+  brueckeSelbstEinrichten().then((neu) => {
+    if (!neu) return;
+    const teile = [];
+    if (neu.konten.length) teile.push(neu.konten.length + ' Konten');
+    if (neu.depots.length) teile.push(neu.depots.length + ' Depots');
+    if (teile.length) toast('Brücke erkannt: ' + teile.join(' und ') + ' angelegt');
+    else if (neu.verbunden) toast('Mit der Brücke verbunden');
+    neuZeichnen();
+    if (db.einst.autoAbruf !== false) brueckeAlleHolen();
+  });
   // Kurse höchstens einmal am Tag von allein nachladen
   if (db.einst.autoKurse && db.positionen.some((p) => p.symbol)){
     const alt = !db.zuletztKurse || (Date.now() - new Date(db.zuletztKurse).getTime()) > 20 * 3600 * 1000;

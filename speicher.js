@@ -37,6 +37,7 @@ function leereDb(){
       kursKey: '',       // Schlüssel für die Marktdaten-API
       kursDienst: 'twelvedata',
       autoKurse: true,
+      autoAbruf: true,   // beim Start selbsttätig bei der Brücke nachfragen
       sperreMin: 15,     // Minuten bis zur Selbstsperre; 0 = nie
       startAnsicht: 'ueberblick'
     },

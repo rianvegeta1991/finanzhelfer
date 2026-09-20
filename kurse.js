@@ -103,8 +103,18 @@ async function kursHolen(pos){
 /* ---------- alle Kurse ----------
  * Nacheinander und mit Pause: die Gratis-Stufen zählen streng pro Minute.
  * `melde(fertig, gesamt, text)` versorgt die Fortschrittsanzeige. */
+/* Hängt die Position an einem Depot, das die Brücke füllt? Dann kommt ihr
+ * Kurs von dort und braucht keine zweite Quelle. */
+function ausBruecke(p){
+  const d = db.depots.find((x) => x.id === p.depotId);
+  return !!(d && d.dienst === 'bruecke');
+}
+
 async function kurseAktualisieren(melde){
-  const offen = db.positionen.filter((p) => String(p.symbol || '').trim());
+  // Brücken-Positionen überspringen: deren Kurs ist gerade erst gekommen.
+  // Sonst liefe bei jedem Start eine Handvoll überflüssiger Abfragen gegen
+  // CoinGecko – die dann auch noch am Limit scheitern.
+  const offen = db.positionen.filter((p) => String(p.symbol || '').trim() && !ausBruecke(p));
   const bericht = { erneuert:0, fehler:[] };
   for (let i = 0; i < offen.length; i++){
     const p = offen[i];
