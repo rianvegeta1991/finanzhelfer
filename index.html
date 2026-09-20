@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Finanzhelfer</title>
+<meta name="description" content="Einnahmen, Ausgaben, Depots und laufende Verträge an einer Stelle – alles auf dem eigenen Gerät.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1d6a8c">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Finanzhelfer">
+<style>
+:root{
+  --bg:#f4f7fa; --karte:#ffffff; --karte2:#fbfcfd; --rand:#e0e6ec; --text:#131a21; --leise:#68757f;
+  --akzent:#1d6a8c; --akzent-hell:#e6f0f5; --plus:#2e8b6f; --minus:#c0603f; --warn:#d4823d;
+  --schatten:0 1px 2px rgba(15,32,45,.06), 0 6px 20px rgba(15,32,45,.05);
+  --r:16px; --r-klein:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f141a; --karte:#182027; --karte2:#1d262e; --rand:#2a343d; --text:#e6ecf1; --leise:#93a1ac;
+    --akzent:#57a8cb; --akzent-hell:#17262e; --plus:#4fb894; --minus:#e0806b; --warn:#e0a057;
+    --schatten:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.28);
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding-bottom:calc(74px + env(safe-area-inset-bottom));
+  overscroll-behavior-y:none;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+a{color:var(--akzent)}
+.leise{color:var(--leise)}
+.klein{font-size:13px}
+.mini{font-size:12px}
+.plus{color:var(--plus)} .minus{color:var(--minus)} .warnfarbe{color:var(--warn)}
+.zahl{font-variant-numeric:tabular-nums}
+.versteckt{display:none !important}
+
+/* ---------- Kopf ---------- */
+.kopf{
+  position:sticky; top:0; z-index:30; background:var(--bg);
+  padding:calc(9px + env(safe-area-inset-top)) 16px 8px;
+  border-bottom:1px solid transparent; transition:border-color .2s;
+}
+.kopf.scrollt{border-bottom-color:var(--rand)}
+.kopf-inner,.zeitleiste{max-width:760px;margin:0 auto}
+.kopf-zeile{display:flex;align-items:center;gap:10px}
+.kopf h1{font-size:18px;flex:1}
+.logo{width:26px;height:26px;flex:none}
+.kopf-btn{
+  width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
+  color:var(--leise);flex:none;
+}
+.kopf-btn:hover{background:var(--karte)}
+.kopf-btn svg{width:20px;height:20px}
+
+/* Zeitraum + Kontenfilter */
+.zeitleiste{display:flex;align-items:center;gap:6px;margin-top:8px}
+.zeit-nav{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:var(--leise);flex:none;font-size:18px;line-height:1}
+.zeit-nav:hover{background:var(--karte)}
+.zeit-nav:disabled{opacity:.3;cursor:default}
+.zeit-mitte{flex:1;text-align:center;min-width:0}
+.zeit-mitte button{font-weight:600;font-size:15px;display:block;width:100%;padding:4px 0;border-radius:var(--r-klein)}
+.zeit-mitte button:hover{background:var(--karte)}
+.zeit-mitte small{display:block;font-weight:400;font-size:12px;color:var(--leise)}
+
+main{padding:4px 16px 28px;max-width:760px;margin:0 auto}
+
+/* ---------- Karten ---------- */
+.karte{
+  background:var(--karte); border:1px solid var(--rand); border-radius:var(--r);
+  box-shadow:var(--schatten); padding:16px; margin-bottom:13px;
+}
+.karte-kopf{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.karte-kopf h2{font-size:15px;flex:1}
+.karte-kopf .mini{color:var(--leise)}
+.karte > h2{font-size:15px;margin-bottom:12px}
+
+/* ---------- Vermögen ---------- */
+.verm-summe{font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.verm-zeile{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--rand);font-size:14px}
+.verm-zeile:first-of-type{margin-top:12px}
+.verm-zeile span:first-child{display:flex;align-items:center;gap:8px;min-width:0}
+.verm-zeile b{font-weight:600;flex:none}
+.punkt{width:9px;height:9px;border-radius:50%;flex:none}
+.verm-balken{display:flex;height:8px;border-radius:5px;overflow:hidden;margin-top:12px;background:var(--rand)}
+.verm-balken i{display:block}
+
+/* ---------- Kacheln ---------- */
+.kacheln{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:13px}
+.kachel{
+  background:var(--karte);border:1px solid var(--rand);border-radius:var(--r-klein);
+  padding:11px 10px;text-align:center;box-shadow:var(--schatten);
+}
+.kachel .wert{font-size:17px;font-weight:650;letter-spacing:-.01em;display:block;margin-bottom:2px;white-space:nowrap}
+.kachel .titel{display:block;font-size:11.5px;color:var(--leise);letter-spacing:.02em;text-transform:uppercase}
+
+/* ---------- Diagramme ---------- */
+.dia{width:100%;display:block;overflow:visible}
+.dia text{fill:var(--leise);font-size:10px;font-family:inherit}
+.dia .achse{stroke:var(--rand);stroke-width:1}
+.dia .gitter{stroke:var(--rand);stroke-width:1;stroke-dasharray:2 4}
+.ring-box{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.ring-box svg{width:136px;height:136px;flex:none}
+.ring-mitte{font-size:13px;font-weight:650;fill:var(--text)}
+.ring-mitte.klein2{font-size:10px;font-weight:400;fill:var(--leise)}
+.legende{flex:1;min-width:190px;display:flex;flex-direction:column;gap:5px}
+.legende-zeile{display:flex;align-items:center;gap:8px;font-size:13.5px;width:100%;text-align:left;padding:2px 0;border-radius:6px}
+.legende-zeile:hover{background:var(--karte2)}
+.legende-zeile .nam{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.legende-zeile .wrt{font-weight:600;flex:none}
+.legende-zeile .pz{color:var(--leise);font-size:12px;flex:none;width:38px;text-align:right}
+
+/* ---------- Listen ---------- */
+.liste{display:flex;flex-direction:column}
+.zeile{
+  display:flex;align-items:center;gap:11px;padding:10px 0;
+  border-top:1px solid var(--rand);width:100%;text-align:left;
+}
+.zeile:first-child{border-top:0}
+.zeile:hover{background:var(--karte2)}
+.sym{
+  width:34px;height:34px;border-radius:50%;flex:none;display:grid;place-items:center;
+  font-size:16px;background:var(--akzent-hell);
+}
+.zeile .mitte{flex:1;min-width:0;overflow:hidden}
+/* display:block ist Pflicht – die Zeilen bestehen aus <span>, sonst laufen
+   Titel und Unterzeile ineinander und sprengen die Karte nach rechts. */
+.zeile .tit{display:block;font-size:14.5px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zeile .sub{display:block;font-size:12px;color:var(--leise);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zeile .rechts{text-align:right;flex:none;max-width:45%}
+.zeile .betrag{display:block;font-weight:600;font-size:14.5px;font-variant-numeric:tabular-nums}
+.tag-kopf{font-size:12px;color:var(--leise);font-weight:600;padding:12px 0 2px;letter-spacing:.02em}
+.tag-kopf:first-child{padding-top:0}
+.leer{text-align:center;color:var(--leise);padding:26px 10px;font-size:14px}
+.leer b{display:block;color:var(--text);font-size:15px;margin-bottom:5px}
+
+/* ---------- Knöpfe ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:11px 16px;border-radius:var(--r-klein);font-size:14.5px;font-weight:600;
+  background:var(--akzent);color:#fff;
+}
+.btn:hover{filter:brightness(1.08)}
+.btn.zweit{background:var(--karte);color:var(--text);border:1px solid var(--rand)}
+.btn.zweit:hover{background:var(--karte2);filter:none}
+.btn.gefahr{background:var(--minus)}
+.btn.voll{width:100%}
+.btn:disabled{opacity:.5;cursor:default;filter:none}
+.btn-reihe{display:flex;gap:8px;flex-wrap:wrap}
+.btn-reihe .btn{flex:1;min-width:130px}
+
+/* Chips */
+.chips{display:flex;gap:7px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none;-ms-overflow-style:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  padding:6px 12px;border-radius:999px;border:1px solid var(--rand);background:var(--karte);
+  font-size:13px;white-space:nowrap;flex:none;color:var(--leise);
+}
+.chip.an{background:var(--akzent);border-color:var(--akzent);color:#fff;font-weight:600}
+
+/* ---------- Formular ---------- */
+.feld{margin-bottom:12px}
+.feld > label{display:block;font-size:12.5px;color:var(--leise);margin-bottom:5px;font-weight:550}
+.feld input,.feld select,.feld textarea{
+  width:100%;padding:11px 12px;border-radius:var(--r-klein);
+  border:1px solid var(--rand);background:var(--karte2);
+}
+.feld input:focus,.feld select:focus,.feld textarea:focus{outline:2px solid var(--akzent);outline-offset:-1px;border-color:transparent}
+.feld textarea{min-height:64px;resize:vertical}
+.feld-paar{display:flex;gap:10px}
+.feld-paar > .feld{flex:1;min-width:0}
+.schalter{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--rand)}
+.schalter .mitte{flex:1;min-width:0}
+.schalter input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--akzent)}
+.hinw{font-size:12.5px;color:var(--leise);margin-top:-4px;margin-bottom:12px;line-height:1.4}
+
+/* ---------- Overlays ---------- */
+.ov{
+  position:fixed;inset:0;z-index:60;background:rgba(10,18,26,.5);
+  display:flex;align-items:flex-end;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.ov.auf{opacity:1;pointer-events:auto}
+.ov-inhalt{
+  background:var(--bg);width:100%;max-width:640px;max-height:92vh;overflow-y:auto;
+  border-radius:20px 20px 0 0;padding:0 16px calc(20px + env(safe-area-inset-bottom));
+  transform:translateY(24px);transition:transform .22s;
+}
+.ov.auf .ov-inhalt{transform:none}
+.ov-kopf{
+  position:sticky;top:0;background:var(--bg);padding:14px 0 10px;
+  display:flex;align-items:center;gap:10px;z-index:2;border-bottom:1px solid var(--rand);margin-bottom:14px;
+}
+.ov-kopf h2{font-size:16px;flex:1}
+.ov-zu{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--leise);font-size:22px;line-height:1;flex:none}
+.ov-zu:hover{background:var(--karte)}
+@media (min-width:640px){
+  .ov{align-items:center}
+  .ov-inhalt{border-radius:20px;max-height:86vh}
+}
+
+/* ---------- Fußleiste ---------- */
+.fuss{
+  position:fixed;left:0;right:0;bottom:0;z-index:40;
+  background:var(--karte);border-top:1px solid var(--rand);
+  display:flex;padding-bottom:env(safe-area-inset-bottom);
+}
+.fuss button{
+  flex:1;padding:8px 2px 9px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  color:var(--leise);font-size:10.5px;position:relative;
+}
+.fuss button.an{color:var(--akzent)}
+.fuss svg{width:22px;height:22px}
+.fuss .kerbe{
+  position:absolute;top:5px;right:calc(50% - 18px);min-width:16px;height:16px;padding:0 4px;
+  border-radius:8px;background:var(--minus);color:#fff;font-size:10px;font-weight:700;
+  display:grid;place-items:center;
+}
+
+/* ---------- Sperre ---------- */
+#sperre{
+  position:fixed;inset:0;z-index:90;background:var(--bg);
+  display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;
+}
+#sperre.auf{display:flex}
+#sperre .schloss{width:64px;height:64px;margin-bottom:16px}
+#sperre h2{font-size:20px;margin-bottom:6px}
+#sperre p{color:var(--leise);font-size:14px;max-width:340px;margin:0 0 20px}
+#sperre form{width:100%;max-width:320px}
+#sp-fehler{color:var(--minus);font-size:13.5px;min-height:20px;margin-top:8px}
+
+/* ---------- Willkommen ---------- */
+#start-hilfe .hilfe-schritt{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--rand)}
+#start-hilfe .hilfe-schritt:first-of-type{border-top:0}
+#start-hilfe .nr{
+  width:24px;height:24px;border-radius:50%;background:var(--akzent);color:#fff;flex:none;
+  display:grid;place-items:center;font-size:12.5px;font-weight:700;margin-top:1px;
+}
+
+/* ---------- Meldung ---------- */
+#toast{
+  position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom));transform:translate(-50%,12px);
+  background:var(--text);color:var(--bg);padding:11px 16px;border-radius:999px;font-size:13.5px;font-weight:550;
+  z-index:80;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:88vw;text-align:center;
+}
+#toast.auf{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- Fortschritt ---------- */
+.fortschritt{height:5px;border-radius:3px;background:var(--rand);overflow:hidden;margin-top:9px}
+.fortschritt i{display:block;height:100%;background:var(--akzent);transition:width .25s}
+
+/* ---------- Hinweis-Kasten ---------- */
+.kasten{
+  background:var(--akzent-hell);border-radius:var(--r-klein);padding:12px 13px;
+  font-size:13px;line-height:1.5;margin-bottom:13px;
+}
+.kasten b{display:block;margin-bottom:3px}
+.kasten.warnung{background:color-mix(in srgb, var(--warn) 14%, transparent)}
+.kasten code{
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+  background:var(--karte);padding:1px 5px;border-radius:4px;
+}
+
+/* ---------- Bericht zum Drucken ---------- */
+#bericht{display:none}
+#bericht h1{font-size:22px;margin-bottom:2px}
+#bericht h2{font-size:15px;margin:18px 0 6px}
+#bericht table{width:100%;border-collapse:collapse;font-size:12px}
+#bericht th,#bericht td{text-align:left;padding:4px 6px;border-bottom:1px solid #ddd}
+#bericht td.z,#bericht th.z{text-align:right;font-variant-numeric:tabular-nums}
+@media print{
+  body{background:#fff;color:#000;padding:0}
+  .kopf,.fuss,main,.ov,#toast,#sperre{display:none !important}
+  #bericht{display:block !important;padding:0 6mm}
+  @page{margin:14mm}
+}
+</style>
+</head>
+<body>
+
+<!-- ---------- Sperrschirm ---------- -->
+<div id="sperre">
+  <svg class="schloss" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+    <rect x="10" y="21" width="28" height="19" rx="4" style="stroke:var(--akzent)"/>
+    <path d="M16 21v-5a8 8 0 0 1 16 0v5" style="stroke:var(--akzent)"/>
+    <circle cx="24" cy="30" r="2.5" fill="currentColor" style="stroke:none;fill:var(--akzent)"/>
+  </svg>
+  <h2>Finanzhelfer ist gesperrt</h2>
+  <p>Gib deine Passphrase ein. Sie wird nicht gespeichert – ohne sie lassen sich die Daten nicht öffnen.</p>
+  <form id="sp-form" autocomplete="off">
+    <div class="feld"><input type="password" id="sp-pass" placeholder="Passphrase" autocomplete="current-password"></div>
+    <button class="btn voll" type="submit">Entsperren</button>
+    <div id="sp-fehler" role="alert"></div>
+  </form>
+</div>
+
+<!-- ---------- Kopf ---------- -->
+<header class="kopf" id="kopf">
+  <div class="kopf-inner">
+    <div class="kopf-zeile">
+      <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
+        <circle cx="24" cy="24" r="22" fill="#1d6a8c"/>
+        <path d="M13 31l7-8 5 4 10-12" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="35" cy="15" r="3.4" fill="#e8b75c"/>
+      </svg>
+      <h1 id="kopf-titel">Überblick</h1>
+      <button class="kopf-btn" id="btn-sperren" title="Jetzt sperren" aria-label="Jetzt sperren">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+        </svg>
+      </button>
+      <button class="kopf-btn" id="btn-mehr-kopf" title="Einstellungen" aria-label="Einstellungen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="12" r="3.2"/>
+          <path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/>
+        </svg>
+      </button>
+    </div>
+    <div class="zeitleiste" id="zeitleiste">
+      <button class="zeit-nav" id="zeit-zurueck" aria-label="Zeitraum zurück">‹</button>
+      <div class="zeit-mitte"><button id="zeit-wahl"><span id="zeit-text">September 2026</span><small id="zeit-sub">Alle Konten</small></button></div>
+      <button class="zeit-nav" id="zeit-vor" aria-label="Zeitraum vor">›</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section id="s-ueberblick"></section>
+  <section id="s-umsaetze" class="versteckt"></section>
+  <section id="s-depot" class="versteckt"></section>
+  <section id="s-vertraege" class="versteckt"></section>
+  <section id="s-mehr" class="versteckt"></section>
+</main>
+
+<!-- ---------- Fußleiste ---------- -->
+<nav class="fuss" id="fuss">
+  <button data-an="ueberblick" class="an">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M9.5 19V5M15 19v-7M20.5 19v-4"/></svg>
+    <span>Überblick</span>
+  </button>
+  <button data-an="umsaetze">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+    <span>Umsätze</span>
+  </button>
+  <button data-an="depot">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-6 3.5 3L20 6"/><path d="M15 6h5v5"/></svg>
+    <span>Depot</span>
+  </button>
+  <button data-an="vertraege">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/></svg>
+    <span>Verträge</span>
+    <i class="kerbe versteckt" id="kerbe-vertraege">0</i>
+  </button>
+  <button data-an="mehr">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg>
+    <span>Mehr</span>
+  </button>
+</nav>
+
+<!-- ---------- Overlays ---------- -->
+<div class="ov" id="ov-zeit"><div class="ov-inhalt">
+  <div class="ov-kopf"><h2>Zeitraum und Konten</h2><button class="ov-zu" data-zu>×</button></div>
+  <div id="zeit-inhalt"></div>
+</div></div>
+
+<div class="ov" id="ov-umsatz"><div class="ov-inhalt">
+  <div class="ov-kopf"><h2 id="ums-titel">Umsatz</h2><button class="ov-zu" data-zu>×</button></div>
+  <div id="ums-inhalt"></div>
+</div></div>
+
+<div class="ov" id="ov-konto"><div class="ov-inhalt">
+  <div class="ov-kopf"><h2 id="kto-titel">Konto</h2><button class="ov-zu" data-zu>×</button></div>
+  <div id="kto-inhalt"></div>
+</div></div>
+
+<div class="ov" id="ov-pos"><div class="ov-inhalt">
+  <div class="ov-kopf"><h2 id="pos-titel">Position</h2><button class="ov-zu" data-zu>×</button></div>
+  <div id="pos-inhalt"></div>
+</div></div>
+
+<div class="ov" id="ov-vertrag"><div class="ov-inhalt">
+  <div class="ov-kopf"><h2 id="vtr-titel">Vertrag</h2><button class="ov-zu" data-zu>×</button></div>
+  <div id="vtr-inhalt"></div>
+</div></div>
+
+<div class="ov" id="ov-import"><div class="ov-inhalt">
+  <div class="ov-kopf"><h2>Kontoauszug einlesen</h2><button class="ov-zu" data-zu>×</button></div>
+  <div id="imp-inhalt"></div>
+</div></div>
+
+<div class="ov" id="ov-info"><div class="ov-inhalt">
+  <div class="ov-kopf"><h2 id="info-titel">Hinweis</h2><button class="ov-zu" data-zu>×</button></div>
+  <div id="info-inhalt"></div>
+</div></div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<!-- Druckansicht: wird vor dem Drucken aus dem aktuellen Zeitraum gefüllt -->
+<div id="bericht"></div>
+
+<script src="daten.js?v=1.0"></script>
+<script src="speicher.js?v=1.0"></script>
+<script src="import.js?v=1.0"></script>
+<script src="banking.js?v=1.0"></script>
+<script src="kurse.js?v=1.0"></script>
+<script src="ansichten.js?v=1.0"></script>
+<script src="app.js?v=1.0"></script>
+</body>
+</html>

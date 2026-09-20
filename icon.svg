@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Finanzhelfer: steigende Linie mit Goldmünze am Hochpunkt.
+       Bei Logoänderungen icon-maskable.svg UND icons.ps1 nachziehen. -->
+  <rect width="512" height="512" rx="112" fill="#1d6a8c"/>
+  <g fill="none" stroke="#ffffff" stroke-width="36" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M139 331 L213 246 L266 291 L373 160"/>
+  </g>
+  <circle cx="373" cy="160" r="36" fill="#e8b75c"/>
+</svg>
