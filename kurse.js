@@ -152,8 +152,17 @@ async function depotAbgleichen(depot){
   roh.forEach((r) => {
     const isin = String(r.isin || '').toUpperCase();
     const name = r.name || r.bezeichnung || isin;
-    const vorhanden = db.positionen.find((p) => p.depotId === depot.id &&
-      ((isin && String(p.isin).toUpperCase() === isin) || normal(p.name) === normal(name)));
+    // Haben beide Seiten eine ISIN, entscheidet allein sie. Der Name taugt nur
+    // als Notnagel, wenn eine fehlt: zwei Wertpapiere können gleich heißen und
+    // trotzdem verschieden sein – bei Trade Republic gibt es etwa zweimal
+    // „Private Equity" unter verschiedenen ISINs. Mit einem Oder verschluckt
+    // die Zuordnung die zweite Position stillschweigend.
+    const vorhanden = db.positionen.find((p) => {
+      if (p.depotId !== depot.id) return false;
+      const pIsin = String(p.isin || '').toUpperCase();
+      if (isin && pIsin) return pIsin === isin;
+      return normal(p.name) === normal(name);
+    });
     const werte = {
       name,
       isin,
