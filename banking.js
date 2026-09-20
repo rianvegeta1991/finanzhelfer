@@ -79,7 +79,10 @@ async function brueckeKonten(cfg){
  * umsaetzeUebernehmen über die Signatur ab. */
 async function brueckeUmsaetze(cfg, konto){
   const letzte = db.umsaetze.filter((u) => u.kontoId === konto.id).map((u) => u.datum).sort();
-  const von = letzte.length ? tageAddieren(letzte[letzte.length - 1], -7) : tageAddieren(heute(), -400);
+  // Beim ersten Abruf **kein** `von` mitschicken: dann liefert die Brücke
+  // alles, was sie hat. Eine willkürliche Grenze würde die Historie
+  // stillschweigend abschneiden, und man merkt es erst Monate später.
+  const von = letzte.length ? tageAddieren(letzte[letzte.length - 1], -7) : '';
   const roh = await brueckeHolen(cfg, '/umsaetze', { konto: konto.apiRef, von });
   return roh.map((u) => umsatzBauen({
     kontoId: konto.id,

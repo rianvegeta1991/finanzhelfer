@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.1';
+const APP_VERSION = '1.2';
 
 const el = (id) => document.getElementById(id);
 function h(s){
@@ -555,6 +555,7 @@ function tunAusfuehren(was){
     case 'pos-neu':      posFensterAuf(null); break;
     case 'pos':          posFensterAuf(arg); break;
     case 'depot':        depotFensterAuf(arg); break;
+    case 'depot-neu':    depotFensterAuf(null); break;
     case 'depotsync':    depotSyncJetzt(arg); break;
     case 'vertrag-neu':  vertragFensterAuf(null); break;
     case 'vertrag':      vertragFensterAuf(arg); break;

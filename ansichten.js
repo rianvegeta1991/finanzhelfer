@@ -352,12 +352,16 @@ function zeichneDepot(){
   const guv = wertGes - einstand;
 
   let html = '';
-  if (!positionen.length){
-    html += '<div class="karte"><div class="leer"><b>Noch keine Positionen</b>' +
-      'Trage deine Wertpapiere ein – mit Stückzahl und Einstandskurs. Kurse lassen sich von Hand pflegen ' +
-      'oder über eine Marktdaten-API automatisch holen.' +
+  // Ganz leer heißt: noch gar nichts eingerichtet. Sobald ein Depot angelegt
+  // ist – auch ein leeres, das die Brücke erst noch füllen soll – wird unten
+  // normal gezeichnet, sonst käme man an dessen „abrufen“ nie heran.
+  if (!positionen.length && !db.depots.length){
+    html += '<div class="karte"><div class="leer"><b>Noch kein Depot</b>' +
+      'Lege ein Depot an und trage deine Wertpapiere ein – oder lass es von der Brücke füllen. ' +
+      'Kurse holt die App auf Wunsch selbst.' +
       '<div class="btn-reihe" style="margin-top:13px;justify-content:center">' +
-      '<button class="btn" data-tun="pos-neu">Position hinzufügen</button></div></div></div>' +
+      '<button class="btn" data-tun="depot-neu">Depot anlegen</button>' +
+      '<button class="btn zweit" data-tun="pos-neu">Position hinzufügen</button></div></div></div>' +
       '<div class="kasten"><b>Depot automatisch anbinden</b>' +
       'Broker ohne offene Schnittstelle (die Mehrheit) lassen sich nur von Hand pflegen. Wer eine Brücke ' +
       'betreibt, holt die Bestände über <code>/positionen</code>. Kurse gehen unabhängig davon – siehe ' +
@@ -378,6 +382,7 @@ function zeichneDepot(){
     '<div class="btn-reihe" style="margin-top:13px">' +
       '<button class="btn" data-tun="kurse">Kurse aktualisieren</button>' +
       '<button class="btn zweit" data-tun="pos-neu">Position hinzufügen</button>' +
+      '<button class="btn zweit" data-tun="depot-neu">Depot anlegen</button>' +
     '</div>' +
     '<div id="kurs-fortschritt"></div></div>';
 
@@ -397,13 +402,22 @@ function zeichneDepot(){
   const depots = db.depots.length ? db.depots : [{ id:'', name:'Depot' }];
   depots.forEach((d) => {
     const eigene = positionen.filter((p) => p.depotId === d.id || (!d.id && !p.depotId));
-    if (!eigene.length) return;
+    // Ein leeres Depot wird trotzdem gezeichnet, solange es angelegt ist –
+    // sonst fehlte der Knopf, mit dem man es erstmals füllt.
+    if (!eigene.length && !d.id) return;
     const dWert = eigene.reduce((s, p) => s + posWert(p), 0);
     html += '<div class="karte"><div class="karte-kopf"><h2>' + h(d.name) + '</h2>' +
       '<span class="mini zahl">' + eur(dWert, true) + '</span>' +
       (d.dienst === 'bruecke' ? '<button class="mini" data-tun="depotsync:' + d.id + '" style="color:var(--akzent);font-weight:600">abrufen</button>' : '') +
       (d.id ? '<button class="mini" data-tun="depot:' + d.id + '" title="Depot bearbeiten" aria-label="Depot bearbeiten">✏️</button>' : '') +
-      '</div><div class="liste">' +
+      '</div>' +
+      (eigene.length ? '' :
+        '<div class="leer" style="padding:14px 10px"><b>Noch keine Bestände</b>' +
+        (d.dienst === 'bruecke'
+          ? 'Tippe oben auf „abrufen", um sie von der Brücke zu holen.'
+          : 'Füge eine Position hinzu oder stelle das Depot über ✏️ auf die Brücke um.') +
+        '</div>') +
+      '<div class="liste">' +
       eigene.map((p) => {
         const g = posGuv(p), pz = posProz(p);
         const art = (WP_ARTEN.find((a) => a.id === p.art) || WP_ARTEN[5]).name;
@@ -519,13 +533,19 @@ function posFensterAuf(id){
   ovAuf('ov-pos');
 }
 
-/* Depot umbenennen, anbinden oder löschen. Steckt im Info-Fenster, weil es nur
- * vier Felder sind – ein eigenes Overlay wäre Ballast. */
+/* Depot anlegen, umbenennen, anbinden oder löschen. Steckt im Info-Fenster,
+ * weil es nur vier Felder sind – ein eigenes Overlay wäre Ballast.
+ * `id` leer heißt: neues Depot. Das braucht es für Depots, die über die
+ * Brücke gefüllt werden – dort gibt es keine erste Position, bei der ein
+ * Depot nebenbei entstehen könnte. */
 function depotFensterAuf(id){
-  const d = db.depots.find((x) => x.id === id);
+  const neu = !id;
+  const d = neu
+    ? { id:'', name:'', broker:'', dienst:'manuell', apiRef:'' }
+    : db.depots.find((x) => x.id === id);
   if (!d) return;
-  const anzahl = db.positionen.filter((p) => p.depotId === d.id).length;
-  infoZeigen('Depot bearbeiten',
+  const anzahl = neu ? 0 : db.positionen.filter((p) => p.depotId === d.id).length;
+  infoZeigen(neu ? 'Depot anlegen' : 'Depot bearbeiten',
     feldHtml('Name', eingabe('dp-name', d.name, 'text')) +
     feldHtml('Broker', eingabe('dp-broker', d.broker || '', 'text', 'z. B. comdirect')) +
     feldHtml('Bestände', '<select id="dp-dienst">' +
@@ -534,19 +554,23 @@ function depotFensterAuf(id){
     feldHtml('Kennung bei der Brücke', eingabe('dp-ref', d.apiRef || '', 'text', 'freiwillig'),
       'Wird an <code>/positionen?depot=…</code> mitgeschickt.') +
     '<div class="btn-reihe">' +
-      '<button class="btn gefahr" id="dp-weg">Löschen</button>' +
-      '<button class="btn" id="dp-ok">Speichern</button>' +
+      (neu ? '' : '<button class="btn gefahr" id="dp-weg">Löschen</button>') +
+      '<button class="btn" id="dp-ok">' + (neu ? 'Anlegen' : 'Speichern') + '</button>' +
     '</div>' +
-    '<p class="hinw">' + anzahl + ' Position' + (anzahl === 1 ? '' : 'en') + ' in diesem Depot.</p>');
+    (neu ? '' : '<p class="hinw">' + anzahl + ' Position' + (anzahl === 1 ? '' : 'en') + ' in diesem Depot.</p>'));
 
   el('dp-ok').onclick = () => {
-    d.name = wert('dp-name') || d.name;
+    const name = wert('dp-name');
+    if (!name){ toast('Bitte einen Namen angeben'); return; }
+    d.name = name;
     d.broker = wert('dp-broker');
     d.dienst = el('dp-dienst').value;
     d.apiRef = wert('dp-ref');
-    sichern(); ovZu('ov-info'); neuZeichnen(); toast('Gespeichert');
+    if (neu){ d.id = neueId(); db.depots.push(d); }
+    sichern(); ovZu('ov-info'); neuZeichnen();
+    toast(neu ? 'Depot angelegt' : 'Gespeichert');
   };
-  el('dp-weg').onclick = () => {
+  if (!neu) el('dp-weg').onclick = () => {
     frage('Depot löschen?', 'Das Depot und seine ' + anzahl + ' Positionen werden entfernt.', 'Löschen', () => {
       db.depots = db.depots.filter((x) => x.id !== d.id);
       db.positionen = db.positionen.filter((p) => p.depotId !== d.id);
