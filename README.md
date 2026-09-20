@@ -76,9 +76,15 @@ Deshalb zwei Wege, die wirklich funktionieren:
 **1. Auszug einlesen.** Aus dem Online-Banking herunterladen, hier einlesen. Das deckt
 Kategorisierung, Vertragserkennung und alle Auswertungen vollständig ab.
 
-**2. Eigene Brücke.** Ein kleiner Dienst bei dir – etwa mit
-[python-fints](https://github.com/raphaelm/python-fints), `aqbanking` oder einem
-Aggregator-Zugang – stellt zwei Endpunkte bereit, und die App ruft regelmäßig dort ab:
+**2. Eine Brücke auf dem eigenen Rechner.** Fertig gebaut gibt es sie als
+**[finanzhelfer-bruecke](https://github.com/rianvegeta1991/finanzhelfer-bruecke)**:
+ein kleines Rust-Programm, das FinTS mit deiner Bank spricht (ING, Commerzbank,
+Sparkassen, Volksbanken …), dazu die offizielle API von Bitvavo und – über das
+Fremdwerkzeug `pytr` – auch Trade Republic. Eingerichtet wird sie in der App unter
+*Mehr → Automatischer Abruf*.
+
+Wer lieber selbst baut – etwa mit [python-fints](https://github.com/raphaelm/python-fints),
+`aqbanking` oder einem Aggregator-Zugang – muss nur diese Endpunkte liefern:
 
 ```
 GET /konten
@@ -138,13 +144,3 @@ Diagramme sind handgeschriebenes SVG, ohne Bibliothek.
 - Budgets je Kategorie mit Warnung bei Überschreitung
 - Abgleich zwischen mehreren Geräten
 - Splittbuchungen (eine Zahlung auf mehrere Kategorien verteilen)
-
-## Automatischer Abruf: die Brücke
-
-Für den regelmäßigen, selbsttätigen Abruf gibt es ein zweites Programm, das auf
-deinem Rechner läuft: **[finanzhelfer-bruecke](https://github.com/rianvegeta1991/finanzhelfer-bruecke)**.
-
-Es spricht FinTS mit deiner Bank (ING, Commerzbank, Sparkassen, Volksbanken …),
-die offizielle API von Bitvavo und – über das Fremdwerkzeug `pytr` – auch Trade
-Republic, und bedient genau die drei Endpunkte von oben. Eingerichtet wird es in
-der App unter *Mehr → Automatischer Abruf*.
