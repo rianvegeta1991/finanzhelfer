@@ -138,3 +138,13 @@ Diagramme sind handgeschriebenes SVG, ohne Bibliothek.
 - Budgets je Kategorie mit Warnung bei Überschreitung
 - Abgleich zwischen mehreren Geräten
 - Splittbuchungen (eine Zahlung auf mehrere Kategorien verteilen)
+
+## Automatischer Abruf: die Brücke
+
+Für den regelmäßigen, selbsttätigen Abruf gibt es ein zweites Programm, das auf
+deinem Rechner läuft: **[finanzhelfer-bruecke](https://github.com/rianvegeta1991/finanzhelfer-bruecke)**.
+
+Es spricht FinTS mit deiner Bank (ING, Commerzbank, Sparkassen, Volksbanken …),
+die offizielle API von Bitvavo und – über das Fremdwerkzeug `pytr` – auch Trade
+Republic, und bedient genau die drei Endpunkte von oben. Eingerichtet wird es in
+der App unter *Mehr → Automatischer Abruf*.

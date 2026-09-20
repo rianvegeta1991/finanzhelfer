@@ -845,7 +845,9 @@ function zeichneMehr(){
     html += '<div class="karte"><div class="karte-kopf"><h2>Automatischer Abruf</h2>' +
       '<button class="mini" data-tun="info:bruecke" style="color:var(--akzent);font-weight:600">Wie geht das? ›</button></div>' +
       '<p class="klein leise" style="margin:-4px 0 12px">Eine Seite im Browser darf nicht direkt mit deiner Bank ' +
-      'sprechen. Für den regelmäßigen Abruf trägst du hier einen eigenen Dienst ein, der das für dich tut.</p>' +
+      'sprechen. Für den regelmäßigen Abruf trägst du hier einen eigenen Dienst ein, der das für dich tut – ' +
+      'etwa die <a href="https://github.com/rianvegeta1991/finanzhelfer-bruecke" target="_blank" ' +
+      'rel="noopener">Finanzhelfer-Brücke</a>.</p>' +
       feldHtml('Adresse der Brücke', eingabe('br-basis', bruecke.basis, 'url', 'https://…')) +
       feldHtml('Token', eingabe('br-token', bruecke.token, 'password', 'Bearer-Token')) +
       '<div class="btn-reihe"><button class="btn zweit" id="br-test">Verbindung prüfen</button>' +
@@ -1343,8 +1345,10 @@ function infoThema(thema){
       '<p class="klein">Deshalb gibt es zwei Wege, die wirklich funktionieren:</p>' +
       '<p class="klein"><b>1. Auszug einlesen.</b> Aus dem Online-Banking herunterladen, hier hineinziehen. ' +
       'Kategorien setzt die App selbst, Doppelte erkennt sie.</p>' +
-      '<p class="klein"><b>2. Eigene Brücke.</b> Ein kleiner Dienst bei dir – etwa mit <code>python-fints</code>, ' +
-      '<code>aqbanking</code> oder einem Aggregator-Zugang – stellt zwei Endpunkte bereit:</p>' +
+      '<p class="klein"><b>2. Eigene Brücke.</b> Ein kleiner Dienst bei dir, der mit der Bank spricht. ' +
+      'Fertig gebaut gibt es ihn unter <a href="https://github.com/rianvegeta1991/finanzhelfer-bruecke" ' +
+      'target="_blank" rel="noopener">finanzhelfer-bruecke</a> – er kann FinTS (ING, Commerzbank, Sparkassen, ' +
+      'Volksbanken …), Bitvavo und Trade Republic. Wer selbst baut, muss nur diese Endpunkte liefern:</p>' +
       '<div class="kasten"><code>GET /konten</code><br>' +
       '<span class="mini">→ [{ref, name, bank, iban, art, saldo, waehrung}]</span><br><br>' +
       '<code>GET /umsaetze?konto=REF&amp;von=YYYY-MM-DD</code><br>' +

@@ -151,11 +151,16 @@ async function depotAbgleichen(depot){
       symbol: r.symbol || '',
       art: WP_ARTEN.some((a) => a.id === r.art) ? r.art : 'sonst',
       stueck: Number(r.stueck ?? r.anzahl ?? 0) || 0,
-      einstand: Number(r.einstand ?? r.kaufkurs ?? 0) || 0,
       kurs: Number(r.kurs ?? r.preis ?? 0) || 0,
       waehrung: (r.waehrung || 'EUR').toUpperCase(),
       kursStand: heute()
     };
+    // Den Einstandskurs nur übernehmen, wenn die Gegenstelle wirklich einen
+    // kennt. Manche Quellen liefern ihn nicht mit (Bitvavo etwa) – eine 0
+    // würde dort einen von Hand gepflegten Wert stillschweigend löschen.
+    const einstand = Number(r.einstand ?? r.kaufkurs ?? 0) || 0;
+    if (einstand > 0 || !vorhanden) werte.einstand = einstand;
+
     if (vorhanden){ Object.assign(vorhanden, werte); erneuert++; }
     else { db.positionen.push(Object.assign({ id:neueId(), depotId:depot.id, notiz:'' }, werte)); neu++; }
   });
