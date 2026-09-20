@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.2';
+const APP_VERSION = '1.3';
 
 const el = (id) => document.getElementById(id);
 function h(s){

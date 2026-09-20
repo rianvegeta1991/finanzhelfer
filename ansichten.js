@@ -245,13 +245,23 @@ function saldoAendern(kontoId, betrag){
 /* ===================================================================
  * KONTEN
  * =================================================================== */
-function kontoFensterAuf(id){
+/* `entwurf` trägt den Zwischenstand über ein Neuzeichnen hinweg.
+ * Die Maske wird nämlich neu aufgebaut, wenn man „Art" oder „Woher kommen die
+ * Buchungen?" umstellt – ohne den Entwurf wären alle bisherigen Eingaben weg
+ * und die Auswahl spränge auf ihren Ausgangswert zurück.
+ *
+ * Gearbeitet wird immer auf einer Kopie, auch beim Bearbeiten: sonst stünden
+ * halbfertige Eingaben schon im Bestand, bevor man auf Speichern tippt. */
+function kontoFensterAuf(id, entwurf){
   const neu = !id;
-  const k = neu
-    ? { id:'', name:'', bank:'', iban:'', art:'giro', waehrung:'EUR', saldo:0,
-        saldoStand: heute(), dienst:'auszug', apiRef:'', farbe: DEPOT_FARBEN[db.konten.length % DEPOT_FARBEN.length] }
-    : db.konten.find((x) => x.id === id);
-  if (!k) return;
+  const original = neu ? null : db.konten.find((x) => x.id === id);
+  if (!neu && !original) return;
+  const k = entwurf || Object.assign(
+    { id:'', name:'', bank:'', iban:'', art:'giro', waehrung:'EUR', saldo:0,
+      saldoStand: heute(), dienst:'auszug', apiRef:'',
+      farbe: DEPOT_FARBEN[db.konten.length % DEPOT_FARBEN.length] },
+    original || {}
+  );
 
   const anzahl = neu ? 0 : db.umsaetze.filter((u) => u.kontoId === k.id).length;
   el('kto-titel').textContent = neu ? 'Konto anlegen' : k.name || 'Konto';
@@ -285,8 +295,9 @@ function kontoFensterAuf(id){
     (anzahl ? '<p class="hinw">' + anzahl + ' Buchungen hängen an diesem Konto.</p>' : '');
 
   // Die Felder hängen an der Art bzw. am Dienst – bei Wechsel neu zeichnen
-  el('kto-art').onchange = () => { k.art = el('kto-art').value; kontoWerteMerken(k); kontoFensterAuf(neu ? null : id); };
-  el('kto-dienst').onchange = () => { k.dienst = el('kto-dienst').value; kontoWerteMerken(k); kontoFensterAuf(neu ? null : id); };
+  // Beim Umstellen den Zwischenstand mitgeben, sonst beginnt das Fenster von vorn
+  el('kto-art').onchange = () => { kontoWerteMerken(k); k.art = el('kto-art').value; kontoFensterAuf(id, k); };
+  el('kto-dienst').onchange = () => { kontoWerteMerken(k); k.dienst = el('kto-dienst').value; kontoFensterAuf(id, k); };
 
   el('kto-ok').onclick = () => {
     const name = wert('kto-name');
@@ -302,7 +313,8 @@ function kontoFensterAuf(id){
       db.konten.push(Object.assign({ id: neueId(), farbe: k.farbe }, werte));
       toast('Konto angelegt');
     } else {
-      Object.assign(k, werte);
+      // In den echten Eintrag schreiben, nicht in die Arbeitskopie
+      Object.assign(original, werte);
       toast('Gespeichert');
     }
     sichern(); ovZu('ov-konto'); neuZeichnen();
@@ -338,6 +350,7 @@ function kontoWerteMerken(k){
   if (el('kto-bank')) k.bank = wert('kto-bank');
   if (el('kto-iban')) k.iban = wert('kto-iban');
   if (el('kto-saldo')) k.saldo = wertZahl('kto-saldo');
+  if (el('kto-waehrung')) k.waehrung = (wert('kto-waehrung') || 'EUR').toUpperCase();
   if (el('kto-ref')) k.apiRef = wert('kto-ref');
 }
 
