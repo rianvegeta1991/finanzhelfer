@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.6';
+const APP_VERSION = '1.7';
 
 const el = (id) => document.getElementById(id);
 function h(s){
@@ -545,6 +545,7 @@ function tunAusfuehren(was){
     case 'ov-zu':        ovAlleZu(); break;
     case 'zeit':         zeitFensterAuf(); break;
     case 'import':       importFensterAuf(); break;
+    case 'pos-import':   importPositionenAuf(arg); break;
     case 'beispiel':     beispielLaden(); break;
     case 'katfilter':
       filter.kategorie = arg; filter.suche = ''; zeigeAnsicht('umsaetze'); break;
@@ -624,10 +625,9 @@ function starten(){
     const knopf = e.target.closest('[data-tun]');
     if (knopf){ e.preventDefault(); tunAusfuehren(knopf.dataset.tun); }
   });
-  /* Klick auf den dunklen Rand schließt das Fenster */
-  document.querySelectorAll('.ov').forEach((o) => {
-    o.addEventListener('click', (e) => { if (e.target === o) o.classList.remove('auf'); });
-  });
+  /* Ein Klick auf den dunklen Rand schließt das Fenster **nicht**. Beim
+   * Bearbeiten daneben zu tippen kostete sonst alle Eingaben – geschlossen
+   * wird nur über das × oder mit Esc. */
   document.addEventListener('keydown', (e) => {
     letzteAktion = Date.now();
     if (e.key === 'Escape') ovAlleZu();

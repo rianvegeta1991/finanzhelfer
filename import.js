@@ -33,6 +33,43 @@ function impZahl(s){
   return minus ? -z : z;
 }
 
+/* Zahlen mit **mehr als zwei** Nachkommastellen – Fondsanteile (142,7650),
+ * Anteilspreise, Anleihekurse (0,9327).
+ *
+ * `impZahl` darf das nicht: dort ist „1.234“ ein Tausenderpunkt, und genau
+ * diese Regel macht aus 142,7650 die Zahl 1427650. Hier gilt stattdessen:
+ * liegen beide Zeichen vor, trennt das hintere die Nachkommastellen; ein
+ * einzelnes Komma ist im Deutschen immer dezimal; ein einzelner Punkt nur
+ * dann Tausenderpunkt, wenn genau drei Ziffern folgen. */
+function impZahlGenau(s){
+  if (typeof s === 'number') return s;
+  let t = String(s || '').replace(/[^\d,.\-+]/g, '').trim();
+  if (!t) return NaN;
+  const minus = /^-/.test(t) || /-$/.test(t);
+  t = t.replace(/[-+]/g, '');
+
+  const kommas = (t.match(/,/g) || []).length;
+  const punkte = (t.match(/\./g) || []).length;
+  const k = t.lastIndexOf(','), p = t.lastIndexOf('.');
+
+  if (kommas && punkte){
+    // Das hintere Zeichen trennt die Nachkommastellen
+    t = (k > p) ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, '');
+  } else if (kommas > 1){
+    t = t.replace(/,/g, '');                      // lauter Tausendertrenner
+  } else if (kommas === 1){
+    t = t.replace(',', '.');
+  } else if (punkte === 1 && t.length - p - 1 === 3){
+    t = t.replace('.', '');                       // 1.234 = eintausendzweihundert…
+  } else if (punkte > 1){
+    t = t.replace(/\./g, '');
+  }
+
+  const z = parseFloat(t);
+  if (!isFinite(z)) return NaN;
+  return minus ? -z : z;
+}
+
 /* „31.12.2025“, „31.12.25“, „2025-12-31“, „31/12/2025“ → ISO. */
 function impDatum(s){
   const t = String(s || '').trim();
@@ -186,6 +223,114 @@ function impCsvUmsaetze(lese, zuordnung, kontoId){
     }));
   });
   return raus;
+}
+
+/* ---------- Depotbestände aus einer CSV ----------
+ * Für Depots ohne FinTS-Zugang – die FNZ Bank (ebase) etwa bietet keinen,
+ * gibt ihre Bestände aber als Tabelle heraus. Dieselbe Spaltensuche wie oben. */
+const IMP_POS_MUSTER = {
+  name:     ['bezeichnung','wertpapier','fondsname','fonds','produkt','name','titel'],
+  isin:     ['isin'],
+  wkn:      ['wkn','wertpapierkennnummer'],
+  stueck:   ['anteile','stueck','bestand','menge','nominal','quantity','anzahl'],
+  kurs:     ['ruecknahmepreis','anteilspreis','kurs','preis','price'],
+  einstand: ['einstandskurs','einstandspreis','einstand','kaufkurs','avgcost'],
+  wert:     ['bestandswert','gegenwert','marktwert','depotwert','wert','value']
+};
+
+function csvPosVorschlag(kopf){
+  const norm = kopf.map(normal);
+  const gefunden = {};
+  const belegt = new Set();
+  const felder = Object.keys(IMP_POS_MUSTER);
+  felder.forEach((f) => { gefunden[f] = -1; });
+  [(k, m) => k === m, (k, m) => k.startsWith(m), (k, m) => k.includes(m)].forEach((passt) => {
+    felder.forEach((feld) => {
+      if (gefunden[feld] >= 0) return;
+      for (const muster of IMP_POS_MUSTER[feld]){
+        const i = norm.findIndex((k, idx) => !belegt.has(idx) && passt(k, muster));
+        if (i >= 0){ gefunden[feld] = i; belegt.add(i); break; }
+      }
+    });
+  });
+  return gefunden;
+}
+
+function impCsvPositionen(lese, zuordnung, depotId){
+  const z = zuordnung || csvPosVorschlag(lese.kopf);
+  const raus = [];
+  lese.zeilen.forEach((zeile) => {
+    const hole = (i) => (i >= 0 && zeile[i] !== undefined ? String(zeile[i]).trim() : '');
+    const name = hole(z.name);
+    const isin = hole(z.isin).toUpperCase();
+    if (!name && !isin) return;
+
+    const stueck = impZahlGenau(hole(z.stueck));
+    if (!isFinite(stueck) || stueck <= 0) return;
+
+    let kurs = impZahlGenau(hole(z.kurs));
+    const wert = impZahlGenau(hole(z.wert));
+    // Fondsauszüge nennen oft nur Anteile und Bestandswert, keinen Preis
+    if (!isFinite(kurs) || kurs <= 0){
+      kurs = (isFinite(wert) && wert > 0) ? wert / stueck : 0;
+    }
+    const einstand = impZahlGenau(hole(z.einstand));
+
+    raus.push({
+      id: neueId(),
+      depotId,
+      name: name || isin,
+      isin,
+      wkn: hole(z.wkn).toUpperCase(),
+      symbol: '',
+      art: posArtRaten(name, isin),
+      stueck: Math.round(stueck * 1e6) / 1e6,
+      einstand: isFinite(einstand) && einstand > 0 ? einstand : 0,
+      kurs: Math.round(kurs * 10000) / 10000,
+      waehrung: 'EUR',
+      kursStand: heute(),
+      notiz: ''
+    });
+  });
+  return raus;
+}
+
+function posArtRaten(name, isin){
+  const n = normal(name);
+  if (n.includes('etf') || n.includes('ucits')) return 'etf';
+  if (n.includes('fonds') || n.includes('fund') || n.includes('invest')) return 'fonds';
+  if (n.includes('anleihe') || n.includes('bond') || n.includes('renten')) return 'anleihe';
+  // Fondsdepots führen ganz überwiegend Fonds – ohne Hinweis ist das die
+  // bessere Annahme als „Aktie"
+  return isin ? 'fonds' : 'sonst';
+}
+
+/* Bestände in ein Depot übernehmen. Zuordnung über die ISIN, sonst den Namen –
+ * dieselbe Regel wie beim Abruf über die Brücke. */
+function positionenUebernehmen(liste, depotId){
+  let neu = 0, erneuert = 0;
+  liste.forEach((p) => {
+    const vorhanden = db.positionen.find((x) => {
+      if (x.depotId !== depotId) return false;
+      const xIsin = String(x.isin || '').toUpperCase();
+      if (p.isin && xIsin) return xIsin === p.isin;
+      return normal(x.name) === normal(p.name);
+    });
+    if (vorhanden){
+      // Ein selbst gepflegtes Börsenkürzel und ein vorhandener Einstandskurs
+      // überleben den Import – die Tabelle kennt beides oft nicht
+      vorhanden.stueck = p.stueck;
+      vorhanden.kurs = p.kurs;
+      vorhanden.kursStand = p.kursStand;
+      if (p.einstand > 0) vorhanden.einstand = p.einstand;
+      if (p.wkn) vorhanden.wkn = p.wkn;
+      erneuert++;
+    } else {
+      db.positionen.push(p);
+      neu++;
+    }
+  });
+  return { neu, erneuert };
 }
 
 /* ---------- CAMT.053 (XML) ---------- */

@@ -59,7 +59,23 @@ function zeichneUmsaetze(){
     const vorhanden = new Set(umsaetzeVon().map((u) => u.kategorie));
     const chips = KATEGORIEN.filter((k) => vorhanden.has(k.id));
 
+    // Konten ganz oben: hier will man springen, nicht erst ein Fenster öffnen.
+    // Ein Tipp zeigt nur dieses Konto, derselbe Tipp noch einmal wieder alle.
+    const kontoLeiste = db.konten.length < 2 ? '' :
+      '<div class="chips" style="padding-bottom:11px">' +
+        '<button class="chip' + (filter.konten.length ? '' : ' an') + '" data-ktosprung="">' +
+          'Alle · ' + eur(vermoegen().liquide, true) + '</button>' +
+        db.konten.map((k) => {
+          const an = filter.konten.length === 1 && filter.konten[0] === k.id;
+          const schuld = kontoart(k.art).schuld;
+          return '<button class="chip' + (an ? ' an' : '') + '" data-ktosprung="' + k.id + '">' +
+            kontoart(k.art).icon + ' ' + h(k.name) + ' · ' +
+            (schuld ? '−' : '') + eur(Math.abs(k.saldo), true) + '</button>';
+        }).join('') +
+      '</div>';
+
     let html =
+      kontoLeiste +
       '<div class="karte" style="padding:12px 13px">' +
         feldHtml('Suche', eingabe('ums-suche', filter.suche, 'search', 'Empfänger, Zweck oder Betrag')) +
         '<div class="chips" style="padding-bottom:0">' +
@@ -98,6 +114,14 @@ function zeichneUmsaetze(){
     ziel.innerHTML = html;
 
     el('ums-suche').oninput = (e) => { filter.suche = e.target.value; zeichneUmsaetze(); };
+    ziel.querySelectorAll('[data-ktosprung]').forEach((b) => {
+      b.onclick = () => {
+        const id = b.dataset.ktosprung;
+        // Nochmal auf dasselbe Konto tippen heißt: wieder alle zeigen
+        filter.konten = (!id || (filter.konten.length === 1 && filter.konten[0] === id)) ? [] : [id];
+        neuZeichnen();   // der Kopf zeigt die Kontenzahl mit an
+      };
+    });
     ziel.querySelectorAll('[data-katchip]').forEach((b) => {
       b.onclick = () => {
         const v = b.dataset.katchip;
@@ -395,6 +419,7 @@ function zeichneDepot(){
     '<div class="btn-reihe" style="margin-top:13px">' +
       '<button class="btn" data-tun="kurse">Kurse aktualisieren</button>' +
       '<button class="btn zweit" data-tun="pos-neu">Position hinzufügen</button>' +
+      '<button class="btn zweit" data-tun="pos-import">Bestände einlesen</button>' +
       '<button class="btn zweit" data-tun="depot-neu">Depot anlegen</button>' +
     '</div>' +
     '<div id="kurs-fortschritt"></div></div>';
@@ -1041,6 +1066,88 @@ async function abgleichJetzt(){
  * IMPORT
  * =================================================================== */
 let impStand = null;   // { lese, kontoId, art, umsaetze }
+
+/* Bestände eines Depots aus einer Tabelle einlesen – für Depots ohne
+ * FinTS-Zugang, etwa bei der FNZ Bank. */
+function importPositionenAuf(depotId){
+  impStand = null;
+  const depots = db.depots.length ? db.depots : [];
+  if (!depots.length){
+    infoZeigen('Erst ein Depot', '<p class="klein leise">Lege zuerst ein Depot an, in das die Bestände sollen.</p>' +
+      '<button class="btn voll" data-tun="depot-neu">Depot anlegen</button>');
+    return;
+  }
+  el('imp-inhalt').innerHTML =
+    feldHtml('In welches Depot?', '<select id="imp-depot">' + optHtml(depots, depotId || depots[0].id) + '</select>') +
+    feldHtml('Datei', '<input type="file" id="imp-datei" accept=".csv,.txt,text/csv">',
+      'Die Bestandsliste aus dem Online-Banking deiner Depotbank als CSV. ' +
+      'Gebraucht werden Bezeichnung oder ISIN und die Stückzahl – Kurs und ' +
+      'Einstand nimmt die App mit, wenn sie dabeistehen. Die Datei verlässt dein Gerät nicht.') +
+    '<div id="imp-ergebnis"></div>';
+
+  el('imp-datei').onchange = async (e) => {
+    const datei = e.target.files && e.target.files[0];
+    if (!datei) return;
+    const text = await dateiLesen(datei);
+    try {
+      const lese = impCsvLesen(text);
+      if (!lese || !lese.zeilen.length) throw new Error('In der Datei stehen keine erkennbaren Zeilen.');
+      impStand = { art:'positionen', depotId: el('imp-depot').value, lese, zuordnung: csvPosVorschlag(lese.kopf) };
+      importPosZeigen();
+    } catch (fehler){
+      el('imp-ergebnis').innerHTML = '<div class="kasten warnung" style="margin-top:13px"><b>Datei nicht lesbar</b>' + h(fehler.message) + '</div>';
+    }
+  };
+  el('imp-depot').onchange = () => { if (impStand){ impStand.depotId = el('imp-depot').value; } };
+  ovAuf('ov-import');
+}
+
+function importPosZeigen(){
+  const { lese, zuordnung } = impStand;
+  const spalten = [{ id:'-1', name:'– keine –' }].concat(lese.kopf.map((s, i) => ({ id:String(i), name:(s || 'Spalte ' + (i+1)) })));
+  const auswahl = (feld, label) =>
+    feldHtml(label, '<select data-imppos="' + feld + '">' +
+      optHtml(spalten, String(zuordnung[feld] === undefined ? -1 : zuordnung[feld])) + '</select>');
+
+  impStand.positionen = impCsvPositionen(lese, zuordnung, impStand.depotId);
+  const wert = impStand.positionen.reduce((s, p) => s + p.stueck * p.kurs, 0);
+  const ohneKurs = impStand.positionen.filter((p) => !p.kurs).length;
+
+  el('imp-ergebnis').innerHTML =
+    '<div class="kasten" style="margin-top:13px"><b>CSV erkannt</b>' +
+      lese.zeilen.length + ' Zeilen, Trennzeichen „' + (lese.trenner === '\t' ? 'Tabulator' : lese.trenner) + '“.</div>' +
+    '<div class="feld-paar">' + auswahl('name', 'Bezeichnung') + auswahl('isin', 'ISIN') + '</div>' +
+    '<div class="feld-paar">' + auswahl('stueck', 'Stückzahl') + auswahl('kurs', 'Kurs') + '</div>' +
+    '<div class="feld-paar">' + auswahl('einstand', 'Einstandskurs') + auswahl('wert', 'Bestandswert') + '</div>' +
+    '<p class="hinw">Fehlt der Kurs, rechnet die App ihn aus Bestandswert ÷ Stückzahl.</p>' +
+    (impStand.positionen.length
+      ? '<h2 style="font-size:14px;margin:16px 0 8px">Vorschau</h2>' +
+        '<div class="karte" style="padding:11px 13px;margin-bottom:11px"><div class="liste">' +
+        impStand.positionen.slice(0, 6).map((p) =>
+          '<div class="zeile"><span class="sym">📊</span><span class="mitte">' +
+          '<span class="tit">' + h(p.name) + '</span>' +
+          '<span class="sub">' + h(zahl(p.stueck, 4)) + ' × ' + h(zahl(p.kurs)) + ' €' + (p.isin ? ' · ' + h(p.isin) : '') + '</span></span>' +
+          '<span class="rechts"><span class="betrag zahl">' + eur(p.stueck * p.kurs, true) + '</span></span></div>').join('') +
+        (impStand.positionen.length > 6 ? '<div class="mini leise" style="padding-top:8px">… und ' + (impStand.positionen.length - 6) + ' weitere</div>' : '') +
+        '</div></div>' +
+        '<div class="kacheln">' + kachel('Positionen', String(impStand.positionen.length)) +
+          kachel('Gesamtwert', eur(wert, true)) +
+          kachel('ohne Kurs', String(ohneKurs), ohneKurs ? 'minus' : '') + '</div>' +
+        '<button class="btn voll" id="imp-pos-ok">' + impStand.positionen.length + ' Positionen übernehmen</button>' +
+        '<p class="hinw">Vorhandene Positionen werden über die ISIN erkannt und aktualisiert. ' +
+        'Ein selbst eingetragenes Börsenkürzel bleibt dabei erhalten.</p>'
+      : '<div class="kasten warnung"><b>Keine Bestände erkannt</b>' +
+        'Ohne Bezeichnung oder ISIN und ohne Stückzahl wird eine Zeile übersprungen – stell die Zuordnung um.</div>');
+
+  el('imp-ergebnis').querySelectorAll('[data-imppos]').forEach((s) => {
+    s.onchange = () => { impStand.zuordnung[s.dataset.imppos] = Number(s.value); importPosZeigen(); };
+  });
+  if (el('imp-pos-ok')) el('imp-pos-ok').onclick = () => {
+    const erg = positionenUebernehmen(impStand.positionen, impStand.depotId);
+    sichern(); ovZu('ov-import'); zeigeAnsicht('depot');
+    toast(erg.neu + ' neu, ' + erg.erneuert + ' aktualisiert');
+  };
+}
 
 function importFensterAuf(){
   impStand = null;
