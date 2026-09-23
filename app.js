@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.8';
+const APP_VERSION = '1.9';
 
 const el = (id) => document.getElementById(id);
 function h(s){
@@ -117,15 +117,41 @@ function katSummen(liste, art){
     .map(([id, wert]) => ({ id, wert, name: katName(id), farbe: katFarbe(id) }))
     .sort((a, b) => b.wert - a.wert);
 }
-function vermoegen(){
+/* Kontostand an einem beliebigen Tag: vom heutigen Stand die Buchungen
+ * danach abziehen. Bei Schuldkonten umgekehrt – dort wächst die offene
+ * Summe, wenn Geld abfließt (dieselbe Richtung wie in `saldoAendern`). */
+function kontoSaldoAm(k, stichtag){
+  const jetzt = Number(k.saldo) || 0;
+  if (!stichtag || stichtag >= heute()) return jetzt;
+  const danach = db.umsaetze
+    .filter((u) => u.kontoId === k.id && u.datum > stichtag)
+    .reduce((s, u) => s + u.betrag, 0);
+  return jetzt - danach * (kontoart(k.art).schuld ? -1 : 1);
+}
+
+/* Ohne `stichtag` der heutige Stand, sonst der zum Ende des Zeitraums.
+ * `depotsAktuell` merkt an, dass die Depotbewertung immer die von heute ist:
+ * für Kurse von damals fehlt jede Grundlage. */
+function vermoegen(stichtag){
   let liquide = 0, schulden = 0;
   kontenAktiv().forEach((k) => {
-    const betrag = Number(k.saldo) || 0;
+    const betrag = kontoSaldoAm(k, stichtag);
     if (kontoart(k.art).schuld) schulden += Math.abs(betrag);
     else liquide += betrag;
   });
-  const depots = filter.konten.length ? 0 : depotWert();     // Depots hängen nicht am Kontenfilter
-  return { liquide, depots, schulden, gesamt: liquide + depots - schulden };
+  const depots = filter.konten.length ? 0 : depotWertAm(stichtag);
+  return {
+    liquide, depots, schulden,
+    gesamt: liquide + depots - schulden,
+    stichtag: stichtag || '',
+    depotsAktuell: !!stichtag && !depotStandAm(stichtag)
+  };
+}
+
+/* Der Zeitraum, auf den sich der Überblick bezieht – leer heißt „heute". */
+function stichtagDesZeitraums(){
+  const g = zeitGrenzen();
+  return g.bis < heute() ? g.bis : '';
 }
 /* Fixkosten je Monat aus allen laufenden Verträgen. */
 function fixMonatlich(){
@@ -287,7 +313,8 @@ function zeichneUeberblick(){
     return;
   }
 
-  const v = vermoegen();
+  const stichtag = stichtagDesZeitraums();
+  const v = vermoegen(stichtag);
   const liste = umsaetzeVon();
   const s = summen(liste);
   const abschnitte = reiheAbschnitte(zeit.art === 'jahr' ? 5 : 12);
@@ -306,12 +333,20 @@ function zeichneUeberblick(){
   ];
   const balkenSumme = teile.reduce((a, t) => a + t.wert, 0) || 1;
   html += '<div class="karte">' +
-    '<div class="karte-kopf"><h2>Gesamtvermögen</h2><span class="mini">' + h(filter.konten.length ? 'gefiltert' : 'alle Konten') + '</span></div>' +
+    '<div class="karte-kopf"><h2>' + (stichtag ? 'Vermögen am ' + h(datumKurz(stichtag)) + ausIso(stichtag).getFullYear() : 'Gesamtvermögen') + '</h2>' +
+    '<span class="mini">' + h(filter.konten.length ? 'gefiltert' : 'alle Konten') + '</span></div>' +
     '<div class="verm-summe zahl ' + (v.gesamt < 0 ? 'minus' : '') + '">' + eur(v.gesamt) + '</div>' +
     '<div class="verm-balken">' + teile.map((t) => '<i style="width:' + (t.wert / balkenSumme * 100).toFixed(2) + '%;background:' + t.farbe + '"></i>').join('') + '</div>' +
     teile.map((t) => '<div class="verm-zeile"><span><i class="punkt" style="background:' + t.farbe + '"></i>' + t.name + '</span>' +
       '<b class="zahl">' + (t.name === 'Verbindlichkeiten' && t.wert > 0 ? '−' : '') + eur(t.wert) + '</b></div>').join('') +
+    // Ehrlich bleiben: Konten lassen sich exakt zurückrechnen, Depots nicht –
+    // für Kurse von damals fehlt jede Grundlage, solange nichts aufgezeichnet ist.
+    (v.depotsAktuell && v.depots > 0
+      ? '<div class="mini leise" style="margin-top:9px">Konten zum Stichtag zurückgerechnet. ' +
+        'Für das Depot lag an dem Tag noch keine Aufzeichnung vor – es steht mit dem heutigen Wert darin.</div>'
+      : '') +
     '<div class="btn-reihe" style="margin-top:13px">' +
+      (stichtag ? '<button class="btn" id="verm-heute">Zurück zu heute</button>' : '') +
       '<button class="btn zweit" data-tun="nav:mehr">Konten verwalten</button>' +
       '<button class="btn zweit" data-tun="import">Auszug einlesen</button>' +
     '</div></div>';
@@ -421,6 +456,7 @@ function zeichneUeberblick(){
   html += '</div>';
 
   ziel.innerHTML = html;
+  if (el('verm-heute')) el('verm-heute').onclick = () => { zeit.anker = heute(); neuZeichnen(); };
 }
 
 function kachel(titel, wert, klasse){
@@ -492,8 +528,9 @@ function zeigeAnsicht(name){
   });
   document.querySelectorAll('#fuss button').forEach((b) => b.classList.toggle('an', b.dataset.an === name));
   el('kopf-titel').textContent = TITEL[name];
-  // Der Zeitraum betrifft nur Überblick und Umsätze
-  el('zeitleiste').classList.toggle('versteckt', name !== 'ueberblick' && name !== 'umsaetze');
+  // Der Zeitraum betrifft Überblick, Umsätze und das Depot
+  el('zeitleiste').classList.toggle('versteckt',
+    name !== 'ueberblick' && name !== 'umsaetze' && name !== 'depot');
   window.scrollTo(0, 0);
   neuZeichnen();
 }
@@ -505,6 +542,8 @@ function neuZeichnen(){
     ? filter.konten.length + ' von ' + db.konten.length + ' Konten'
     : (db.konten.length ? 'Alle Konten' : 'Noch kein Konto');
   el('zeit-vor').disabled = !zeitVorMoeglich();
+  // „Heute" nur zeigen, wenn man tatsächlich woanders steht
+  el('zeit-heute').classList.toggle('versteckt', !zeitVorMoeglich());
   el('btn-sperren').classList.toggle('versteckt', !istVerschluesselt());
 
   const offen = fristenOffen().length + wiederkehrendeOffen().length;
@@ -643,6 +682,7 @@ function starten(){
   el('zeit-zurueck').onclick = () => zeitSchieben(-1);
   el('zeit-vor').onclick = () => zeitSchieben(1);
   el('zeit-wahl').onclick = zeitFensterAuf;
+  el('zeit-heute').onclick = () => { zeit.anker = heute(); neuZeichnen(); };
   el('btn-mehr-kopf').onclick = () => zeigeAnsicht('mehr');
   el('btn-sperren').onclick = jetztSperren;
 
@@ -711,6 +751,9 @@ function nachDemOeffnen(){
 
   // Kommt die App von einer Brücke, richtet sie sich selbst ein und holt
   // gleich ab. Ohne Brücke dahinter passiert schlicht nichts.
+  // Einmal am Tag den Depotwert festhalten, auch ohne Abgleich
+  depotStandFesthalten();
+
   brueckeSelbstEinrichten().then((neu) => {
     if (!neu) return;
     const teile = [];

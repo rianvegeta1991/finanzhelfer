@@ -414,22 +414,122 @@ function zeichneDepot(){
     return;
   }
 
+  // Liegt der gewählte Zeitraum in der Vergangenheit, zeigt die Kopfkarte den
+  // festgehaltenen Stand von damals (depotStandAm). Fehlt er – etwa weil die
+  // Aufzeichnung erst später begann –, bleibt der heutige Wert stehen, aber mit
+  // einem Hinweis. Die Karten darunter bewerten immer die heutigen Bestände.
+  const stichtag = stichtagDesZeitraums();
+  const stand = stichtag ? depotStandAm(stichtag) : null;
+  const kopfWert = stand ? stand.wert : wertGes;
+  const kopfEinstand = stand ? stand.einstand : einstand;
+  const kopfGuv = kopfWert - kopfEinstand;
+
   html += '<div class="karte">' +
-    '<div class="karte-kopf"><h2>Depotwert</h2>' +
-    '<span class="mini">' + h(db.zuletztKurse ? 'Kurse: ' + new Date(db.zuletztKurse).toLocaleDateString('de-DE') : 'Kurse von Hand') + '</span></div>' +
-    '<div class="verm-summe zahl">' + eur(wertGes) + '</div>' +
+    '<div class="karte-kopf"><h2>' +
+      (stichtag ? 'Depotwert am ' + h(datumKurz(stichtag)) + ausIso(stichtag).getFullYear() : 'Depotwert') + '</h2>' +
+    '<span class="mini">' + h(stand ? 'festgehaltener Stand'
+      : db.zuletztKurse ? 'Kurse: ' + new Date(db.zuletztKurse).toLocaleDateString('de-DE') : 'Kurse von Hand') + '</span></div>' +
+    '<div class="verm-summe zahl">' + eur(kopfWert) + '</div>' +
     '<div class="kacheln" style="margin:13px 0 0">' +
-      kachel('Einstand', eur(einstand, true)) +
-      kachel('Gewinn/Verlust', eurVz(guv, true), guv >= 0 ? 'plus' : 'minus') +
-      kachel('Rendite', proz(einstand > 0 ? guv / einstand * 100 : 0), guv >= 0 ? 'plus' : 'minus') +
+      kachel('Einstand', eur(kopfEinstand, true)) +
+      kachel('Gewinn/Verlust', eurVz(kopfGuv, true), kopfGuv >= 0 ? 'plus' : 'minus') +
+      kachel('Rendite', proz(kopfEinstand > 0 ? kopfGuv / kopfEinstand * 100 : 0), kopfGuv >= 0 ? 'plus' : 'minus') +
     '</div>' +
+    (stichtag && !stand
+      ? '<p class="hinw" style="margin-top:11px">Für diesen Zeitraum liegt noch kein festgehaltener Depotstand vor – ' +
+        'oben steht deshalb der heutige Wert.</p>'
+      : '') +
     '<div class="btn-reihe" style="margin-top:13px">' +
-      '<button class="btn" data-tun="kurse">Kurse aktualisieren</button>' +
+      (stichtag ? '<button class="btn" id="depot-heute">Zurück zu heute</button>' : '') +
+      '<button class="btn' + (stichtag ? ' zweit' : '') + '" data-tun="kurse">Kurse aktualisieren</button>' +
       '<button class="btn zweit" data-tun="pos-neu">Position hinzufügen</button>' +
       '<button class="btn zweit" data-tun="pos-import">Bestände einlesen</button>' +
       '<button class="btn zweit" data-tun="depot-neu">Depot anlegen</button>' +
     '</div>' +
     '<div id="kurs-fortschritt"></div></div>';
+
+  /* Wertentwicklung – aus der eigenen Aufzeichnung, siehe depotStandFesthalten() */
+  // Erst im gewählten Zeitraum suchen; steht dort noch keine Kurve, die ganze
+  // Aufzeichnung bis zum Zeitraumende zeigen – eine Linie aus einem Punkt sagt nichts.
+  const gr = zeitGrenzen();
+  const alles = (db.depotVerlauf || []).filter((e) => e.datum <= gr.bis);
+  const imZeitraum = alles.filter((e) => e.datum >= gr.von);
+  const reihe = imZeitraum.length >= 2 ? imZeitraum : alles;
+  if (reihe.length >= 2){
+    // Auf höchstens 24 Punkte eindampfen, sonst wird die Linie zum Rauschen
+    const schritt = Math.max(1, Math.ceil(reihe.length / 24));
+    const punkte = reihe.filter((e, i) => i % schritt === 0 || i === reihe.length - 1)
+      .map((e) => ({ name: datumKurz(e.datum), wert: e.wert }));
+    const von = reihe[0], bis = reihe[reihe.length - 1];
+    const diff = bis.wert - von.wert;
+    html += '<div class="karte"><div class="karte-kopf"><h2>Wertentwicklung</h2>' +
+      '<span class="mini">' + h(datumKurz(von.datum) + ' – ' + datumKurz(bis.datum)) + '</span></div>' +
+      linieSvg(punkte) +
+      '<div class="kacheln" style="margin:13px 0 0">' +
+        kachel('Stand', eur(bis.wert, true)) +
+        kachel('Veränderung', eurVz(diff, true), diff >= 0 ? 'plus' : 'minus') +
+        kachel('davon in %', proz(von.wert > 0 ? diff / von.wert * 100 : 0), diff >= 0 ? 'plus' : 'minus') +
+      '</div></div>';
+  } else {
+    html += '<div class="kasten"><b>Wertentwicklung wird aufgezeichnet</b>' +
+      'Kurse von gestern lassen sich nirgends nachträglich herholen, deshalb schreibt die App ' +
+      'den Depotwert ab jetzt täglich mit. Nach ein paar Tagen steht hier eine Kurve' +
+      (reihe.length === 1 ? ' – der erste Stand ist vom ' + h(datumLang(reihe[0].datum)) + '.' : '.') +
+      '</div>';
+  }
+
+  /* Aufteilung nach Gattung – anders als die Aufteilung je Position sagt das
+   * etwas über die Streuung aus und braucht keine Historie. */
+  const nachArt = new Map();
+  positionen.forEach((p) => {
+    const a = (WP_ARTEN.find((x) => x.id === p.art) || WP_ARTEN[5]);
+    nachArt.set(a.name, (nachArt.get(a.name) || 0) + posWert(p));
+  });
+  const artTeile = Array.from(nachArt.entries())
+    .map(([name, wert], i) => ({ name, wert, farbe: DEPOT_FARBEN[i % DEPOT_FARBEN.length] }))
+    .sort((a, b) => b.wert - a.wert);
+  if (artTeile.length > 1){
+    html += '<div class="karte"><h2>Nach Gattung</h2><div class="ring-box">' +
+      ringSvg(artTeile, eur(wertGes, true), 'Depotwert') +
+      '<div class="legende">' + artTeile.map((t) =>
+        '<div class="legende-zeile"><i class="punkt" style="background:' + t.farbe + '"></i>' +
+        '<span class="nam">' + h(t.name) + '</span>' +
+        '<span class="pz">' + Math.round(t.wert / Math.max(1, wertGes) * 100) + '%</span>' +
+        '<span class="wrt zahl">' + eur(t.wert, true) + '</span></div>').join('') +
+      '</div></div></div>';
+  }
+
+  /* Gewinn und Verlust je Position */
+  const mitGuv = positionen.filter((p) => posEinstand(p) > 0)
+    .map((p) => ({ name: p.name, guv: posGuv(p), proz: posProz(p) }))
+    .sort((a, b) => b.guv - a.guv);
+  if (mitGuv.length){
+    const beste = mitGuv.slice(0, 5);
+    const schlechteste = mitGuv.slice(-5).reverse().filter((x) => !beste.includes(x));
+    const zeileGuv = (x) => {
+      const breite = Math.min(100, Math.abs(x.proz));
+      return '<div class="legende-zeile" style="gap:10px">' +
+        '<span class="nam">' + h(x.name) + '</span>' +
+        '<span style="flex:none;width:72px;height:7px;border-radius:4px;background:var(--rand);overflow:hidden;display:block">' +
+          '<i style="display:block;height:100%;width:' + breite.toFixed(0) + '%;background:' +
+          (x.guv >= 0 ? 'var(--plus)' : 'var(--minus)') + '"></i></span>' +
+        '<span class="wrt zahl ' + (x.guv >= 0 ? 'plus' : 'minus') + '" style="width:86px;text-align:right">' +
+          eurVz(x.guv, true) + '</span>' +
+        '<span class="pz" style="width:48px">' + proz(x.proz) + '</span></div>';
+    };
+    html += '<div class="karte"><div class="karte-kopf"><h2>Gewinn und Verlust</h2>' +
+      '<span class="mini">' + mitGuv.length + ' mit Einstandskurs</span></div>' +
+      '<div class="legende" style="gap:7px">' + beste.map(zeileGuv).join('') +
+      (schlechteste.length
+        ? '<div class="mini leise" style="padding:6px 0 2px">Schlusslichter</div>' + schlechteste.map(zeileGuv).join('')
+        : '') +
+      '</div>' +
+      (mitGuv.length < positionen.length
+        ? '<p class="hinw" style="margin-top:10px">' + (positionen.length - mitGuv.length) +
+          ' Positionen ohne Einstandskurs bleiben hier außen vor.</p>'
+        : '') +
+      '</div>';
+  }
 
   /* Aufteilung */
   const teile = positionen.slice(0, 10).map((p, i) => ({ name: p.name, wert: posWert(p), farbe: DEPOT_FARBEN[i % DEPOT_FARBEN.length] }));
@@ -485,6 +585,7 @@ function zeichneDepot(){
       'eingetragene Wert bleibt stehen.</div>';
   }
   ziel.innerHTML = html;
+  if (el('depot-heute')) el('depot-heute').onclick = () => { zeit.anker = heute(); neuZeichnen(); };
 }
 
 function posFensterAuf(id){

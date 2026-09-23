@@ -136,6 +136,7 @@ async function kurseAktualisieren(melde){
     if (i < offen.length - 1) await new Promise((r) => setTimeout(r, 900));
   }
   db.zuletztKurse = new Date().toISOString();
+  depotStandFesthalten();
   sichern();
   if (melde) melde(offen.length, offen.length, '');
   return bericht;
@@ -208,6 +209,46 @@ function posProz(p){
 }
 function depotWert(depotId){
   return db.positionen.filter((p) => !depotId || p.depotId === depotId).reduce((s, p) => s + posWert(p), 0);
+}
+
+/* ---------- Wertverlauf des Depots ----------
+ * Kurse von gestern bekommt man nirgends her, ohne eine Kurshistorie zu
+ * kaufen. Also schreibt die App den Depotwert selbst mit – einmal am Tag,
+ * bei jedem Abgleich. Die Reihe beginnt damit am Tag des Einbaus und wird
+ * mit der Zeit aussagekräftig; eine Rückrechnung wäre nur geraten. */
+function depotStandFesthalten(){
+  if (!db.positionen.length) return;
+  if (!Array.isArray(db.depotVerlauf)) db.depotVerlauf = [];
+  const heuteIso = heute();
+  const wert = Math.round(depotWert() * 100) / 100;
+  const einstand = Math.round(depotEinstand() * 100) / 100;
+
+  const vorhanden = db.depotVerlauf.find((e) => e.datum === heuteIso);
+  if (vorhanden){
+    // Mehrmals am Tag: der letzte Stand des Tages gilt
+    vorhanden.wert = wert;
+    vorhanden.einstand = einstand;
+  } else {
+    db.depotVerlauf.push({ datum: heuteIso, wert, einstand });
+    db.depotVerlauf.sort((a, b) => (a.datum < b.datum ? -1 : 1));
+    // Fünf Jahre Tageswerte reichen für jede Auswertung
+    if (db.depotVerlauf.length > 1830) db.depotVerlauf = db.depotVerlauf.slice(-1830);
+  }
+  sichern();
+}
+
+/* Der letzte aufgezeichnete Stand bis einschließlich `stichtag`. */
+function depotStandAm(stichtag){
+  if (!stichtag || !Array.isArray(db.depotVerlauf)) return null;
+  let treffer = null;
+  db.depotVerlauf.forEach((e) => { if (e.datum <= stichtag) treffer = e; });
+  return treffer;
+}
+
+/* Depotwert zu einem Stichtag – aus der Aufzeichnung, sonst der heutige. */
+function depotWertAm(stichtag){
+  const e = depotStandAm(stichtag);
+  return e ? e.wert : depotWert();
 }
 function depotEinstand(depotId){
   return db.positionen.filter((p) => !depotId || p.depotId === depotId).reduce((s, p) => s + posEinstand(p), 0);

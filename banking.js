@@ -208,6 +208,7 @@ async function brueckeAlleHolen(){
   }
 
   if (bericht.fehler.length) console.warn('[Brücke]', bericht.fehler.join(' | '));
+  if (bericht.positionen) depotStandFesthalten();   // taeglicher Eintrag in den Wertverlauf
   if (bericht.neu || bericht.positionen){
     sichern();
     if (typeof neuZeichnen === 'function') neuZeichnen();
