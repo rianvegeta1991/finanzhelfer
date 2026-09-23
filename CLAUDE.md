@@ -129,8 +129,24 @@ Handgeschriebenes SVG in `app.js`: `ringSvg` (Donut über `stroke-dasharray`),
 `balkenSvg`, `linieSvg`. Beschriftet wird **vom Ende her** gezählt, damit der aktuelle
 Abschnitt immer eine Marke trägt. `skalaStufe` zielt auf drei bis vier Gitterlinien.
 
-Der Guthabenverlauf wird **rückwärts** gerechnet: vom heutigen Kontostand die späteren
+Der Verlauf wird **rückwärts** gerechnet: vom heutigen Kontostand die späteren
 Buchungen abziehen. Nur so passt die Kurve zum angezeigten Vermögen.
+
+Die Kurve ist über Chips umstellbar (`VERLAUF_REIHEN`, gespeichert in
+`db.einst.verlaufReihe`): **Guthaben**, **Depot**, **Gesamtvermögen**. Konten lassen
+sich exakt zurückrechnen, **das Depot nicht** – dafür gibt es nur die tägliche
+Aufzeichnung seit v1.9. Punkte aus der Zeit davor tragen deshalb `geschaetzt` und
+werden unter dem Diagramm auch so benannt; eine Depotkurve aus einem einzigen Tag
+wird gar nicht erst gezeichnet, sondern durch den Hinweis ersetzt. Diese Ehrlichkeit
+bitte nicht wegoptimieren – eine schnurgerade Linie würde das Gegenteil behaupten.
+
+Weitere Karten im Überblick: **Vermögensaufbau** (`deltaBalkenSvg`, Veränderung je
+Abschnitt um eine Nulllinie), **Woraus besteht das Vermögen?** (Ring über die einzelnen
+Konten und Depots, Stand heute) und **Kennzahlen** (Sparquote, Fixkostenquote,
+Reichweite, Schuldenquote). Die Kennzahlen rechnen immer in **Monaten**
+(`reiheAbschnitte(12, 'monat')`) und nur aus Monaten mit Buchungen – sonst zieht die
+leere Zeit vor dem ersten Import jeden Schnitt nach unten. `.kacheln` ist ein
+Dreier-Raster: eine vierte Kachel stünde allein in der zweiten Reihe.
 
 ## Bankanbindung – die wichtigste Festlegung
 

@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.10';
+const APP_VERSION = '1.11';
 
 const el = (id) => document.getElementById(id);
 function h(s){
@@ -255,6 +255,40 @@ function linieSvg(punkte){
   return '<svg viewBox="0 0 ' + B + ' ' + H + '" class="dia" role="img" aria-label="Verlauf">' + s + '</svg>';
 }
 
+/* Balken um eine Nulllinie: wie viel ist je Abschnitt dazugekommen oder
+ * weggegangen. Anders als die Kurve zeigt das nicht den Stand, sondern das
+ * Tempo – ein flacher Monat fällt hier sofort auf. */
+function deltaBalkenSvg(punkte){
+  const B = 360, H = 150, links = 6, rechts = 6, unten = 20, oben = 10;
+  const max = Math.max(1, ...punkte.map((p) => Math.abs(p.wert)));
+  const stufe = skalaStufe(max * 2);
+  const hoehe = H - unten - oben, halb = hoehe / 2;
+  const spur = (B - links - rechts) / Math.max(1, punkte.length);
+  const y0 = oben + halb;
+  const yVon = (w) => y0 - (w / max) * halb;
+  let s = '';
+  for (let w = stufe; w <= max * 1.001; w += stufe){
+    [w, -w].forEach((v) => {
+      const y = yVon(v);
+      s += '<line class="gitter" x1="' + links + '" y1="' + y.toFixed(1) + '" x2="' + (B - rechts) + '" y2="' + y.toFixed(1) + '"/>';
+      s += '<text x="' + (links + 2) + '" y="' + (y - 3).toFixed(1) + '">' +
+           (v > 0 ? '+' : '−') + NF_EUR0.format(Math.abs(v)).replace(/\s?€/, '') + '</text>';
+    });
+  }
+  punkte.forEach((p, i) => {
+    const bw = Math.min(16, spur * 0.55);
+    const x = links + i * spur + (spur - bw) / 2;
+    const y = p.wert >= 0 ? yVon(p.wert) : y0;
+    const hh = Math.max(1.5, Math.abs(yVon(p.wert) - y0));
+    s += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) +
+         '" height="' + hh.toFixed(1) + '" rx="2" fill="var(--' + (p.wert >= 0 ? 'plus' : 'minus') + ')"/>';
+    if (punkte.length <= 8 || (punkte.length - 1 - i) % 2 === 0)
+      s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + h(p.name) + '</text>';
+  });
+  s += '<line class="achse" x1="' + links + '" y1="' + y0.toFixed(1) + '" x2="' + (B - rechts) + '" y2="' + y0.toFixed(1) + '"/>';
+  return '<svg viewBox="0 0 ' + B + ' ' + H + '" class="dia" role="img" aria-label="Veränderung je Abschnitt">' + s + '</svg>';
+}
+
 /* Runde Gitterabstände: 1, 2, 5 × Zehnerpotenz. Gezielt so gewählt, dass
  * drei bis vier Linien herauskommen – bei einer einzigen wirkt das Diagramm leer. */
 function skalaStufe(max){
@@ -265,9 +299,11 @@ function skalaStufe(max){
 }
 
 /* ================= Reihen für die Diagramme ================= */
-/* Die letzten n Abschnitte in der Körnung des gewählten Zeitraums. */
-function reiheAbschnitte(n){
-  const art = (zeit.art === 'frei' || zeit.art === 'alles') ? 'monat' : zeit.art;
+/* Die letzten n Abschnitte in der Körnung des gewählten Zeitraums.
+ * `artErzwingen` überstimmt die Körnung – die Kennzahlen rechnen immer in
+ * Monaten, egal was oben eingestellt ist. */
+function reiheAbschnitte(n, artErzwingen){
+  const art = artErzwingen || ((zeit.art === 'frei' || zeit.art === 'alles') ? 'monat' : zeit.art);
   const anker = ausIso(zeit.art === 'alles' ? heute() : zeit.anker);
   const raus = [];
   for (let i = n - 1; i >= 0; i--){
@@ -291,18 +327,33 @@ function reiheAbschnitte(n){
   return raus;
 }
 
-/* Guthaben im Rückblick: vom heutigen Stand die Buchungen danach abziehen.
- * Nur so passt der Verlauf zum angezeigten Vermögen. */
-function verlaufPunkte(abschnitte){
-  const jetzt = kontenAktiv().filter((k) => !kontoart(k.art).schuld).reduce((s, k) => s + (Number(k.saldo) || 0), 0);
-  const punkte = [];
-  for (let i = abschnitte.length - 1; i >= 0; i--){
-    const nach = db.umsaetze
-      .filter((u) => u.datum > abschnitte[i].bis && kontoPasst(u.kontoId))
-      .reduce((s, u) => s + u.betrag, 0);
-    punkte.unshift({ name: abschnitte[i].name, wert: Math.round((jetzt - nach) * 100) / 100 });
-  }
-  return punkte;
+/* Rückblick je Abschnitt. Konten lassen sich exakt zurückrechnen (vom heutigen
+ * Stand die späteren Buchungen abziehen), das Depot nicht – dafür gibt es nur
+ * das, was seit v1.9 täglich mitgeschrieben wird. Welcher Punkt geschätzt ist,
+ * steht deshalb in `geschaetzt` und wird unter dem Diagramm auch gesagt.
+ *
+ *   guthaben – Konten ohne Verbindlichkeiten (die alte Kurve)
+ *   depot    – Depotwert
+ *   gesamt   – Konten + Depot − Verbindlichkeiten
+ */
+const VERLAUF_REIHEN = [
+  { id:'guthaben', name:'Guthaben',       titel:'Verlauf des Guthabens' },
+  { id:'depot',    name:'Depot',          titel:'Verlauf des Depots' },
+  { id:'gesamt',   name:'Gesamtvermögen', titel:'Verlauf des Gesamtvermögens' }
+];
+function verlaufReihe(){
+  const id = (db.einst || {}).verlaufReihe;
+  return VERLAUF_REIHEN.some((r) => r.id === id) ? id : 'guthaben';
+}
+function verlaufPunkte(abschnitte, reihe){
+  const art = reihe || 'guthaben';
+  return abschnitte.map((a) => {
+    const stichtag = a.bis >= heute() ? '' : a.bis;
+    const v = vermoegen(stichtag);
+    const wert = art === 'depot' ? v.depots : art === 'gesamt' ? v.gesamt : v.liquide;
+    return { name: a.name, wert: Math.round(wert * 100) / 100,
+             geschaetzt: art !== 'guthaben' && v.depotsAktuell && v.depots > 0 };
+  });
 }
 
 /* ================= Überblick ================= */
@@ -403,8 +454,10 @@ function zeichneUeberblick(){
       '</div></div>';
   }
 
-  /* Verlauf */
-  const kurve = verlaufPunkte(abschnitte);
+  /* Verlauf – umstellbar zwischen Guthaben, Depot und Gesamtvermögen */
+  const reihe = verlaufReihe();
+  const reiheInfo = VERLAUF_REIHEN.find((r) => r.id === reihe);
+  const kurve = verlaufPunkte(abschnitte, reihe);
   const anfang = kurve.length ? kurve[0].wert : 0;
   const jetzt = kurve.length ? kurve[kurve.length - 1].wert : 0;
   // Nur tatsächlich erreichte Stände – die Null gehört in die Achse (das
@@ -413,21 +466,133 @@ function zeichneUeberblick(){
   const hoch = werte.length ? Math.max(...werte) : 0;
   const tief = werte.length ? Math.min(...werte) : 0;
   const aenderung = jetzt - anfang;
+  const abDepot = (db.depotVerlauf || []).length ? db.depotVerlauf[0].datum : '';
+  const geschaetzt = kurve.some((p) => p.geschaetzt);
 
-  html += '<div class="karte"><div class="karte-kopf"><h2>Verlauf des Guthabens</h2>' +
+  // Eine Depotkurve aus einem einzigen aufgezeichneten Tag wäre schnurgerade –
+  // und würde damit genau das Falsche behaupten. Dann lieber der Hinweis.
+  const depotFlach = reihe === 'depot' && (db.depotVerlauf || []).length < 2;
+
+  html += '<div class="karte"><div class="karte-kopf"><h2>' + h(reiheInfo.titel) + '</h2>' +
     '<span class="mini">' + h(kurve.length ? kurve[0].name + ' bis ' + kurve[kurve.length - 1].name : '') + '</span></div>' +
-    linieSvg(kurve) +
-    '<div class="kacheln" style="margin:13px 0 0">' +
-      kachel('Heute', eur(jetzt, true)) +
-      kachel('Veränderung', eurVz(aenderung, true), aenderung >= 0 ? 'plus' : 'minus') +
-      // Prozent nur, wenn der Ausgangswert eine sinnvolle Bezugsgröße ist
-      kachel(anfang > 0 ? 'davon in %' : 'Spanne',
-             anfang > 0 ? proz(aenderung / anfang * 100) : eur(hoch - tief, true),
-             anfang > 0 ? (aenderung >= 0 ? 'plus' : 'minus') : '') +
-    '</div>' +
-    '<div class="mini leise" style="margin-top:9px">Höchststand ' + eur(hoch, true) +
-    ', tiefster Stand ' + eur(tief, true) +
-    ' · rückgerechnet aus dem heutigen Kontostand und den erfassten Buchungen.</div></div>';
+    '<div class="chips">' + VERLAUF_REIHEN.map((r) =>
+      '<button class="chip' + (r.id === reihe ? ' an' : '') + '" data-tun="verlauf:' + r.id + '">' +
+      h(r.name) + '</button>').join('') + '</div>' +
+    (depotFlach
+      ? '<div class="kasten"><b>Wird erst aufgezeichnet</b>Kurse von gestern lassen sich nirgends nachholen, ' +
+        'deshalb schreibt die App den Depotwert seit dem ' + h(datumLang(abDepot)) + ' täglich mit. Nach ein paar ' +
+        'Tagen steht hier eine Kurve – heute wären es ' + eur(jetzt, true) + ' als gerade Linie, und das hieße nur, ' +
+        'dass noch nichts anderes bekannt ist.</div>'
+      : linieSvg(kurve)) +
+    (depotFlach ? '' :
+      '<div class="kacheln" style="margin:13px 0 0">' +
+        kachel(stichtag ? 'Am Stichtag' : 'Heute', eur(jetzt, true)) +
+        kachel('Veränderung', eurVz(aenderung, true), aenderung >= 0 ? 'plus' : 'minus') +
+        // Prozent nur, wenn der Ausgangswert eine sinnvolle Bezugsgröße ist
+        kachel(anfang > 0 ? 'davon in %' : 'Spanne',
+               anfang > 0 ? proz(aenderung / anfang * 100) : eur(hoch - tief, true),
+               anfang > 0 ? (aenderung >= 0 ? 'plus' : 'minus') : '') +
+      '</div>' +
+      '<div class="mini leise" style="margin-top:9px">Höchststand ' + eur(hoch, true) +
+      ', tiefster Stand ' + eur(tief, true) + ' · ' +
+      (reihe === 'depot' ? 'aus der täglichen Aufzeichnung des Depotwerts.'
+                         : 'Konten rückgerechnet aus dem heutigen Stand und den erfassten Buchungen.') +
+      (geschaetzt
+        ? ' Der Depotwert wird erst seit dem ' + h(datumLang(abDepot)) + ' mitgeschrieben – für die Zeit davor ' +
+          'steht der heutige Wert in der Kurve. Kurse von damals lassen sich nirgends nachholen.'
+        : '') +
+      '</div>') +
+    '</div>';
+
+  /* Vermögensaufbau: nicht der Stand, sondern das Tempo je Abschnitt */
+  if (kurve.length > 1 && !depotFlach){
+    const deltas = kurve.slice(1).map((p, i) => ({ name: p.name, wert: p.wert - kurve[i].wert }));
+    const summeD = deltas.reduce((a, d) => a + d.wert, 0);
+    const beste = deltas.slice().sort((a, b) => b.wert - a.wert)[0];
+    const schlechteste = deltas.slice().sort((a, b) => a.wert - b.wert)[0];
+    const plusAbschnitte = deltas.filter((d) => d.wert > 0).length;
+    html += '<div class="karte"><div class="karte-kopf"><h2>Vermögensaufbau</h2>' +
+      '<span class="mini">' + h(reiheInfo.name) + ', je Abschnitt</span></div>' +
+      deltaBalkenSvg(deltas) +
+      '<div class="kacheln" style="margin:13px 0 0">' +
+        kachel('Ø je Abschnitt', eurVz(summeD / deltas.length, true), summeD >= 0 ? 'plus' : 'minus') +
+        kachel('Bester (' + beste.name + ')', eurVz(beste.wert, true), beste.wert >= 0 ? 'plus' : 'minus') +
+        kachel('Schwächster (' + schlechteste.name + ')', eurVz(schlechteste.wert, true), schlechteste.wert >= 0 ? 'plus' : 'minus') +
+      '</div>' +
+      '<div class="mini leise" style="margin-top:9px">' + plusAbschnitte + ' von ' + deltas.length +
+      ' Abschnitten im Plus.</div></div>';
+  }
+
+  /* Woraus besteht das Vermögen? Die Vermögenskarte oben teilt in drei Töpfe –
+   * hier steht jedes Konto und jedes Depot einzeln, damit ein Klumpen auffällt. */
+  const bausteine = [];
+  kontenAktiv().forEach((k) => {
+    if (kontoart(k.art).schuld) return;
+    const w = Number(k.saldo) || 0;
+    if (w > 0) bausteine.push({ name: k.name, wert: w });
+  });
+  if (!filter.konten.length){
+    db.depots.forEach((d) => { const w = depotWert(d.id); if (w > 0) bausteine.push({ name: d.name, wert: w }); });
+  }
+  bausteine.sort((a, b) => b.wert - a.wert);
+  const bruttoV = bausteine.reduce((a, t) => a + t.wert, 0);
+  if (bausteine.length > 1){
+    const teileB = bausteine.slice(0, 9).map((t, i) => Object.assign({ farbe: DEPOT_FARBEN[i % DEPOT_FARBEN.length] }, t));
+    const groesster = bausteine[0];
+    html += '<div class="karte"><div class="karte-kopf"><h2>Woraus besteht das Vermögen?</h2>' +
+      '<span class="mini">Stand heute</span></div>' +
+      '<div class="ring-box">' + ringSvg(teileB, eur(bruttoV, true), 'ohne Schulden') +
+      '<div class="legende">' + teileB.map((t) =>
+        '<div class="legende-zeile"><i class="punkt" style="background:' + t.farbe + '"></i>' +
+        '<span class="nam">' + h(t.name) + '</span>' +
+        '<span class="pz">' + Math.round(t.wert / Math.max(1, bruttoV) * 100) + '%</span>' +
+        '<span class="wrt zahl">' + eur(t.wert, true) + '</span></div>').join('') +
+      '</div></div>' +
+      '<div class="mini leise" style="margin-top:9px">Größter Posten: ' + h(groesster.name) + ' mit ' +
+      Math.round(groesster.wert / Math.max(1, bruttoV) * 100) + ' % des Vermögens' +
+      (v.schulden > 0 ? ' · Verbindlichkeiten von ' + eur(v.schulden, true) + ' sind hier nicht abgezogen' : '') +
+      '.</div></div>';
+  }
+
+  /* Kennzahlen – immer aus Monaten gerechnet, egal welche Körnung oben steht,
+   * und nur aus Monaten mit Buchungen: sonst zieht ein leerer Monat aus der
+   * Zeit vor dem ersten Import jeden Schnitt nach unten. */
+  const monate = reiheAbschnitte(12, 'monat').filter((m) => m.ein > 0 || m.aus > 0);
+  if (monate.length >= 2){
+    const oEin = monate.reduce((a, m) => a + m.ein, 0) / monate.length;
+    const oAus = monate.reduce((a, m) => a + m.aus, 0) / monate.length;
+    const sparquote = oEin > 0 ? (oEin - oAus) / oEin * 100 : 0;
+    const fixquote = oEin > 0 ? fix / oEin * 100 : 0;
+    const reichweite = oAus > 0 ? v.liquide / oAus : 0;
+    const schuldquote = (v.liquide + v.depots) > 0 ? v.schulden / (v.liquide + v.depots) * 100 : 0;
+    html += '<div class="karte"><div class="karte-kopf"><h2>Kennzahlen</h2>' +
+      '<span class="mini">' + monate.length + ' Monate mit Buchungen</span></div>' +
+      '<div class="kacheln">' +
+        kachel('Sparquote', zahl(sparquote, 1) + ' %', sparquote >= 0 ? 'plus' : 'minus') +
+        kachel('Fixkostenquote', zahl(fixquote, 1) + ' %', fixquote > 50 ? 'minus' : '') +
+        // Das Raster hat drei Spalten – eine vierte Kachel stünde allein in der
+        // zweiten Reihe. Die Schuldenquote steht deshalb unten, und nur dann,
+        // wenn es überhaupt Verbindlichkeiten gibt.
+        kachel('Reichweite', (reichweite >= 100 ? '99+' : zahl(reichweite, 1)) + ' Mon.', reichweite < 3 ? 'minus' : 'plus') +
+      '</div>' +
+      '<div class="liste" style="margin-top:11px">' +
+        '<div class="zeile"><span class="sym">💰</span><span class="mitte">' +
+          '<span class="tit">Sparquote</span><span class="sub">Was vom Einkommen übrig bleibt – Überweisungen ins ' +
+          'Sparen zählen dabei als gespart, nicht als Ausgabe.</span></span></div>' +
+        '<div class="zeile"><span class="sym">📌</span><span class="mitte">' +
+          '<span class="tit">Fixkostenquote</span><span class="sub">' + eur(fix, true) + ' laufende Verträge gegen ' +
+          eur(oEin, true) + ' Einnahmen im Monatsschnitt.</span></span></div>' +
+        '<div class="zeile"><span class="sym">🛟</span><span class="mitte">' +
+          '<span class="tit">Reichweite</span><span class="sub">So lange trägt das Guthaben ohne jede Einnahme, ' +
+          'bei ' + eur(oAus, true) + ' Ausgaben im Monatsschnitt. Das Depot ist nicht mitgezählt.</span></span></div>' +
+        (v.schulden > 0
+          ? '<div class="zeile"><span class="sym">📉</span><span class="mitte">' +
+            '<span class="tit">Schuldenquote ' + h(zahl(schuldquote, 1)) + ' %</span>' +
+            '<span class="sub">' + eur(v.schulden, true) + ' Verbindlichkeiten gegen ' +
+            eur(v.liquide + v.depots, true) + ' Vermögen.</span></span></div>'
+          : '') +
+      '</div></div>';
+  }
 
   /* Fixkosten */
   const vertraegeAktiv = db.vertraege.filter((x) => x.aktiv !== false);
@@ -630,6 +795,7 @@ function tunAusfuehren(was){
     case 'vertrag':      vertragFensterAuf(arg); break;
     case 'vorschlag':    vorschlagUebernehmen(arg); break;
     case 'vorschlag-weg':vorschlagAblehnen(arg); break;
+    case 'verlauf':      db.einst.verlaufReihe = arg; sichern(); neuZeichnen(); break;
     case 'kurse':        kurseJetzt(); break;
     case 'abgleich':     abgleichJetzt(); break;
     case 'drucken':      berichtDrucken(); break;

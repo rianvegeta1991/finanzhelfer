@@ -40,7 +40,8 @@ function leereDb(){
       autoKurse: true,
       autoAbruf: true,   // beim Start selbsttätig bei der Brücke nachfragen
       sperreMin: 15,     // Minuten bis zur Selbstsperre; 0 = nie
-      startAnsicht: 'ueberblick'
+      startAnsicht: 'ueberblick',
+      verlaufReihe: 'guthaben'   // welche Kurve der Überblick zeigt, siehe VERLAUF_REIHEN
     },
     zuletztKurse: ''
   };
