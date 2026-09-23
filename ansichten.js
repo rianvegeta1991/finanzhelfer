@@ -1095,7 +1095,7 @@ function zeichneMehr(){
       '<button class="zeile" data-tun="info:bruecke"><span class="sym">🔌</span><span class="mitte">' +
         '<span class="tit">Bankkonten anbinden</span><span class="sub">FinTS, Aggregatoren und die eigene Brücke</span></span></button>' +
       '<button class="zeile" data-tun="info:formate"><span class="sym">📂</span><span class="mitte">' +
-        '<span class="tit">Welche Auszüge gehen?</span><span class="sub">CSV, CAMT.053, MT940</span></span></button>' +
+        '<span class="tit">Welche Auszüge gehen?</span><span class="sub">CSV, Excel, PDF, CAMT.053, MT940</span></span></button>' +
       '<button class="zeile" data-tun="info:sicher"><span class="sym">🔒</span><span class="mitte">' +
         '<span class="tit">Wie sicher ist das?</span><span class="sub">Verschlüsselung und was sie nicht leistet</span></span></button>' +
       '</div>' +
@@ -1187,8 +1187,9 @@ function importPositionenAuf(depotId){
   }
   el('imp-inhalt').innerHTML =
     feldHtml('In welches Depot?', '<select id="imp-depot">' + optHtml(depots, depotId || depots[0].id) + '</select>') +
-    feldHtml('Datei', '<input type="file" id="imp-datei" accept=".csv,.txt,text/csv">',
-      'Die Bestandsliste aus dem Online-Banking deiner Depotbank als CSV. ' +
+    feldHtml('Datei', '<input type="file" id="imp-datei" accept=".csv,.txt,.xlsx,.pdf,text/csv,application/pdf,' +
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">',
+      'Die Bestandsliste aus dem Online-Banking deiner Depotbank – als CSV, Excel (.xlsx) oder PDF. ' +
       'Gebraucht werden Bezeichnung oder ISIN und die Stückzahl – Kurs und ' +
       'Einstand nimmt die App mit, wenn sie dabeistehen. Die Datei verlässt dein Gerät nicht.') +
     '<div id="imp-ergebnis"></div>';
@@ -1196,14 +1197,18 @@ function importPositionenAuf(depotId){
   el('imp-datei').onchange = async (e) => {
     const datei = e.target.files && e.target.files[0];
     if (!datei) return;
-    const text = await dateiLesen(datei);
+    impLaedt();
     try {
-      const lese = impCsvLesen(text);
+      const roh = await dateiEinlesen(datei, 'positionen');
+      const lese = roh.art === 'text'
+        ? impCsvLesen(roh.text)
+        : tabelleAusMatrix(impMatrix(roh), 'positionen-tabelle');
       if (!lese || !lese.zeilen.length) throw new Error('In der Datei stehen keine erkennbaren Zeilen.');
-      impStand = { art:'positionen', depotId: el('imp-depot').value, lese, zuordnung: csvPosVorschlag(lese.kopf) };
+      impStand = { art:'positionen', depotId: el('imp-depot').value, quelle: roh,
+                   lese, zuordnung: csvPosVorschlag(lese.kopf) };
       importPosZeigen();
     } catch (fehler){
-      el('imp-ergebnis').innerHTML = '<div class="kasten warnung" style="margin-top:13px"><b>Datei nicht lesbar</b>' + h(fehler.message) + '</div>';
+      impFehlerZeigen(fehler);
     }
   };
   el('imp-depot').onchange = () => { if (impStand){ impStand.depotId = el('imp-depot').value; } };
@@ -1222,8 +1227,7 @@ function importPosZeigen(){
   const ohneKurs = impStand.positionen.filter((p) => !p.kurs).length;
 
   el('imp-ergebnis').innerHTML =
-    '<div class="kasten" style="margin-top:13px"><b>CSV erkannt</b>' +
-      lese.zeilen.length + ' Zeilen, Trennzeichen „' + (lese.trenner === '\t' ? 'Tabulator' : lese.trenner) + '“.</div>' +
+    impQuelleHtml() +
     '<div class="feld-paar">' + auswahl('name', 'Bezeichnung') + auswahl('isin', 'ISIN') + '</div>' +
     '<div class="feld-paar">' + auswahl('stueck', 'Stückzahl') + auswahl('kurs', 'Kurs') + '</div>' +
     '<div class="feld-paar">' + auswahl('einstand', 'Einstandskurs') + auswahl('wert', 'Bestandswert') + '</div>' +
@@ -1250,6 +1254,7 @@ function importPosZeigen(){
   el('imp-ergebnis').querySelectorAll('[data-imppos]').forEach((s) => {
     s.onchange = () => { impStand.zuordnung[s.dataset.imppos] = Number(s.value); importPosZeigen(); };
   });
+  impQuelleVerdrahten(importPosZeigen);
   if (el('imp-pos-ok')) el('imp-pos-ok').onclick = () => {
     const erg = positionenUebernehmen(impStand.positionen, impStand.depotId);
     sichern(); ovZu('ov-import'); zeigeAnsicht('depot');
@@ -1266,8 +1271,10 @@ function importFensterAuf(){
         'Konto zugeordnet werden.<div class="btn-reihe" style="margin-top:10px">' +
         '<button class="btn" data-tun="konto-neu">Konto anlegen</button></div></div>') +
     (db.konten.length
-      ? feldHtml('Datei', '<input type="file" id="imp-datei" accept=".csv,.txt,.xml,.sta,.940,.mt940,text/csv,text/xml">',
-          'CSV, CAMT.053 (XML) oder MT940 aus dem Online-Banking. Die Datei verlässt dein Gerät nicht.')
+      ? feldHtml('Datei', '<input type="file" id="imp-datei" accept=".csv,.txt,.xml,.sta,.940,.mt940,.xlsx,.pdf,' +
+          'text/csv,text/xml,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">',
+          'CSV, Excel (.xlsx), PDF, CAMT.053 (XML) oder MT940 aus dem Online-Banking. ' +
+          'Die Datei verlässt dein Gerät nicht.')
       : '') +
     '<div id="imp-ergebnis"></div>';
 
@@ -1277,25 +1284,80 @@ function importFensterAuf(){
     const datei = e.target.files && e.target.files[0];
     if (!datei) return;
     const kontoId = el('imp-konto').value;
-    const text = await dateiLesen(datei);
+    impLaedt();
     try {
-      importAnalysieren(text, datei.name, kontoId);
+      const roh = await dateiEinlesen(datei, 'umsaetze');
+      if (roh.art === 'text') importAnalysieren(roh.text, datei.name, kontoId);
+      else importTabelleZeigen(roh, kontoId);
     } catch (fehler){
-      el('imp-ergebnis').innerHTML = '<div class="kasten warnung" style="margin-top:13px"><b>Datei nicht lesbar</b>' + h(fehler.message) + '</div>';
+      impFehlerZeigen(fehler);
     }
   };
   ovAuf('ov-import');
 }
 
-/* Auszüge kommen oft in Windows-1252 (Sparkasse, Volksbank). Erst UTF-8
- * versuchen; tauchen Ersatzzeichen auf, nochmal als 1252 lesen. */
-function dateiLesen(datei){
-  return datei.arrayBuffer().then((puffer) => {
-    const utf8 = new TextDecoder('utf-8').decode(puffer);
-    if (!utf8.includes('�')) return utf8;
-    try { return new TextDecoder('windows-1252').decode(puffer); }
-    catch (e){ return utf8; }
-  });
+/* Excel und PDF landen als Matrix hier und laufen danach denselben Weg wie
+ * eine CSV: Spalten zuordnen, Vorschau, übernehmen. */
+function importTabelleZeigen(roh, kontoId){
+  const lese = tabelleAusMatrix(impMatrix(roh), 'tabelle');
+  if (!lese.zeilen.length) throw new Error('In der Datei stehen keine erkennbaren Zeilen.');
+  impStand = { art:'csv', kontoId, quelle: roh, lese, zuordnung: Object.assign({}, lese.zuordnung) };
+  importCsvZeigen();
+}
+
+/* Die gerade gewählte Matrix – bei einer Mappe das ausgesuchte Blatt. */
+function impMatrix(roh){
+  return roh.art === 'xlsx' ? roh.blaetter[roh.blatt].matrix : roh.matrix;
+}
+
+function impLaedt(){
+  if (el('imp-ergebnis')) el('imp-ergebnis').innerHTML =
+    '<div class="kasten" style="margin-top:13px"><b>Datei wird gelesen …</b>' +
+    'Bei PDF und großen Mappen dauert das einen Moment.</div>';
+}
+
+function impFehlerZeigen(fehler){
+  if (el('imp-ergebnis')) el('imp-ergebnis').innerHTML =
+    '<div class="kasten warnung" style="margin-top:13px"><b>Datei nicht lesbar</b>' + h(fehler.message) + '</div>';
+}
+
+/* Der Kasten über der Spaltenzuordnung: woher die Tabelle stammt, bei einer
+ * Excel-Mappe zusätzlich die Blattwahl. */
+function impQuelleHtml(){
+  const q = impStand.quelle;
+  const lese = impStand.lese;
+  if (!q || q.art === 'text'){
+    return '<div class="kasten" style="margin-top:13px"><b>CSV erkannt</b>' +
+      lese.zeilen.length + ' Zeilen, Trennzeichen „' + (lese.trenner === '\t' ? 'Tabulator' : lese.trenner) + '“. ' +
+      'Stimmt die Zuordnung nicht, stell sie hier um.</div>';
+  }
+  if (q.art === 'xlsx'){
+    return '<div class="kasten" style="margin-top:13px"><b>Excel-Mappe erkannt</b>' +
+      lese.zeilen.length + ' Zeilen' + (q.blattNamen.length > 1 ? ' im Blatt „' + h(q.blattNamen[q.blatt]) + '“' : '') +
+      '. Stimmt die Zuordnung nicht, stell sie hier um.' +
+      (q.blattNamen.length > 1
+        ? '<div style="margin-top:9px"><select id="imp-blatt">' +
+          q.blattNamen.map((n, i) => '<option value="' + i + '"' + (i === q.blatt ? ' selected' : '') + '>' +
+            h(n) + '</option>').join('') + '</select></div>'
+        : '') + '</div>';
+  }
+  return '<div class="kasten warnung" style="margin-top:13px"><b>PDF gelesen – bitte nachsehen</b>' +
+    'Eine PDF ist ein Druckbild, keine Datentabelle. Die App hat aus ' + q.zeilenGesamt +
+    ' Textzeilen ' + lese.zeilen.length + ' Datenzeilen rekonstruiert (' + h(q.weg) + ').  ' +
+    'Prüf die Vorschau unten genauer als sonst – und nimm die CSV, wenn deine Bank eine anbietet.</div>';
+}
+
+/* Blattwechsel in einer Excel-Mappe: dieselbe Datei, andere Tabelle. */
+function impQuelleVerdrahten(neuZeigen){
+  const wahl = el('imp-blatt');
+  if (!wahl) return;
+  wahl.onchange = () => {
+    impStand.quelle.blatt = Number(wahl.value);
+    const art = impStand.art === 'positionen' ? 'positionen-tabelle' : 'tabelle';
+    impStand.lese = tabelleAusMatrix(impMatrix(impStand.quelle), art);
+    impStand.zuordnung = Object.assign({}, impStand.lese.zuordnung);
+    neuZeigen();
+  };
 }
 
 function importAnalysieren(text, name, kontoId){
@@ -1332,9 +1394,7 @@ function importCsvZeigen(){
   impStand.umsaetze = impCsvUmsaetze(lese, zuordnung, impStand.kontoId);
 
   el('imp-ergebnis').innerHTML =
-    '<div class="kasten" style="margin-top:13px"><b>CSV erkannt</b>' +
-      lese.zeilen.length + ' Zeilen, Trennzeichen „' + (lese.trenner === '\t' ? 'Tabulator' : lese.trenner) + '“. ' +
-      'Stimmt die Zuordnung nicht, stell sie hier um.</div>' +
+    impQuelleHtml() +
     '<div class="feld-paar">' + auswahl('datum', 'Datum') + auswahl('betrag', 'Betrag') + '</div>' +
     '<div class="feld-paar">' + auswahl('gegen', 'Empfänger') + auswahl('zweck', 'Zweck') + '</div>' +
     importVorschauHtml(impStand.umsaetze);
@@ -1345,6 +1405,7 @@ function importCsvZeigen(){
       importCsvZeigen();
     };
   });
+  impQuelleVerdrahten(importCsvZeigen);
   importKnopfVerdrahten();
 }
 
@@ -1640,6 +1701,13 @@ function infoThema(thema){
       'Verwendungszweck dort in eigenen Feldern stehen.</p>' +
       '<p class="klein"><b>MT940</b> – das alte SWIFT-Format (<code>.sta</code>). Zweck und Name werden aus den ' +
       '<code>?20</code>- bis <code>?33</code>-Feldern zusammengesetzt.</p>' +
+      '<p class="klein"><b>Excel (.xlsx)</b> – wird wie eine Tabelle gelesen, samt Datumszellen. Hat die Mappe ' +
+      'mehrere Blätter, nimmt die App das mit den meisten brauchbaren Zeilen und lässt dich umschalten. ' +
+      'Das alte <code>.xls</code> geht nicht – einmal als .xlsx speichern.</p>' +
+      '<p class="klein"><b>PDF</b> – geht, ist aber die schlechteste Wahl: eine PDF ist ein Druckbild, keine ' +
+      'Datentabelle. Die App liest den Text samt Position aus und baut die Spalten daraus nach. Das gelingt ' +
+      'meistens, aber nicht immer – deshalb die Vorschau vorher wirklich anschauen. Eingescannte Seiten ' +
+      'enthalten nur ein Bild und keinen Text; die kann die App nicht lesen.</p>' +
       '<p class="klein leise">Zahlen dürfen deutsch (1.234,56) oder englisch (1234.56) geschrieben sein, Datumsangaben ' +
       'als 31.12.2025, 31.12.25 oder 2025-12-31. Dateien in Windows-1252 werden erkannt, damit Umlaute stimmen.</p>');
     return;

@@ -19,7 +19,7 @@ Update die minor-Zahl um 1 erhöhen** – als ganze Zahl weiterzählen, nach 1.9
 
 **Drei Stellen hängen an der Versionsnummer und müssen zusammen geändert werden:**
 1. `APP_VERSION` in `app.js`
-2. `?v=1.0` an den **sieben** Skript-Tags in `index.html`
+2. `?v=1.0` an den **acht** Skript-Tags in `index.html`
 3. dieselben `?v=`-Werte in der `ASSETS`-Liste von `sw.js` **plus** `CACHE` hochzählen
 
 Ohne Schritt 2 behalten Besucher nach einem Update alte JavaScript-Dateien (GitHub
@@ -32,7 +32,7 @@ einer Änderung deshalb im Browser:
 
 ## Aufbau
 
-Kein Node, kein Build. Eine HTML-Datei plus sieben Skripte, alle global (kein
+Kein Node, kein Build. Eine HTML-Datei plus acht Skripte, alle global (kein
 Modulsystem, keine IIFE) – `ansichten.js` und `app.js` rufen sich gegenseitig auf,
 deshalb steht `ansichten.js` **vor** `app.js` im Markup.
 
@@ -42,6 +42,7 @@ deshalb steht `ansichten.js` **vor** `app.js` im Markup.
 | `daten.js` | `KATEGORIEN`, `REGELN`, `TURNUS`, `KONTOARTEN`, Formatierung, Datumsrechnung |
 | `speicher.js` | `localStorage`, AES-GCM/PBKDF2, CSV-Bau, Datei-Download |
 | `import.js` | CSV/CAMT/MT940, `kategorieRaten`, `wiederkehrendeFinden` |
+| `dateien.js` | Excel (.xlsx) und PDF als Tabelle: ZIP, Blätter, PDF-Textlayout |
 | `banking.js` | Brücken-Anbindung, `beispieldatenLaden` |
 | `kurse.js` | Marktdaten, Wechselkurse, `posWert`/`posGuv`/`depotWert` |
 | `ansichten.js` | Umsätze, Depot, Verträge, Mehr, Import, Export, Info-Texte |
@@ -96,6 +97,26 @@ Zweck). Kontoauszüge tragen keine stabile ID, deshalb dieser Fingerabdruck.
 
 Dateien werden erst als UTF-8 gelesen; tauchen Ersatzzeichen auf, nochmal als
 Windows-1252 – Sparkasse und Volksbank liefern das bis heute.
+
+### Excel und PDF (`dateien.js`)
+Erkannt wird am **Dateianfang**, nicht an der Endung. Beide Formate werden auf
+dieselbe Form gebracht wie eine CSV (`{kopf, zeilen}`, über `tabelleAusMatrix`) und
+laufen danach durch dieselbe Spaltenzuordnung und Vorschau – deshalb weiß nichts
+dahinter, woher die Tabelle kam. Ausgepackt wird mit `DecompressionStream`, ohne
+fremde Bibliothek.
+
+- **xlsx** ist ein ZIP: gelesen über das zentrale Verzeichnis am Dateiende (im
+  lokalen Kopf stehen die Größen nicht verlässlich). Datumszellen erkennt
+  `xlsxDatumStile` am Zahlenformat. **Zahlen stehen in der Datei immer englisch** und
+  werden von `xlsxZahl` auf deutsche Schreibweise gedreht – sonst macht die
+  Tausenderpunkt-Regel von `impZahl` aus 142.765 Anteilen 142 765.
+- **PDF**: Objekte scannen → Ströme auspacken → Textbefehle ausführen und dabei
+  Position merken (`pdfStuecke`) → aus den x-Werten Spalten rekonstruieren.
+  Zwei Rekonstruktionen (`pdfAlsSpalten` und die Notlösung `pdfAlsZeilentext`)
+  treten gegeneinander an, `tabelleGuete` kürt die bessere. Teilmengen-Schriften
+  brauchen die ToUnicode-CMap, sonst kommt Buchstabensalat.
+- Das alte `.xls`, verschlüsselte PDFs und Scans laufen in eine klare Fehlermeldung.
+  Eingebaut ist kein OCR und soll keines vortäuschen.
 
 ### Vertragserkennung
 `wiederkehrendeFinden` gruppiert Abbuchungen nach normalisierter Gegenseite und

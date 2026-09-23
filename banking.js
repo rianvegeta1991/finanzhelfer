@@ -13,7 +13,7 @@
  * Deshalb zwei Wege, die wirklich funktionieren:
  *
  * 1. AUSZUG EINLESEN (immer verfügbar, ohne alles Weitere)
- *    CSV, CAMT.053 oder MT940 aus dem Online-Banking herunterladen und importieren.
+ *    CSV, Excel, PDF, CAMT.053 oder MT940 aus dem Online-Banking herunterladen und importieren.
  *    Siehe import.js.
  *
  * 2. EIGENE BRÜCKE (für den automatischen, regelmäßigen Abruf)
@@ -40,7 +40,7 @@
  *    bevor echte Daten im Spiel sind. Rein lokal erzeugt, kein Netz. */
 
 const BANK_DIENSTE = [
-  { id:'auszug',  name:'Kontoauszug einlesen', hinweis:'CSV, CAMT.053 oder MT940 aus dem Online-Banking' },
+  { id:'auszug',  name:'Kontoauszug einlesen', hinweis:'CSV, Excel, PDF, CAMT.053 oder MT940 aus dem Online-Banking' },
   { id:'bruecke', name:'Eigene Brücke (API)',  hinweis:'Automatischer Abruf über einen eigenen Dienst' },
   { id:'manuell', name:'Nur von Hand',         hinweis:'Saldo und Buchungen selbst pflegen' }
 ];

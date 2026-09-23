@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.9';
+const APP_VERSION = '1.10';
 
 const el = (id) => document.getElementById(id);
 function h(s){
@@ -472,7 +472,7 @@ function startHilfeHtml(){
     '<div class="hilfe-schritt"><i class="nr">1</i><div><b>Beispieldaten ansehen</b>' +
     '<div class="klein leise">Ein halbes Jahr erfundener Buchungen, damit du siehst, was die App kann. Lässt sich jederzeit wieder löschen.</div></div></div>' +
     '<div class="hilfe-schritt"><i class="nr">2</i><div><b>Eigenen Kontoauszug einlesen</b>' +
-    '<div class="klein leise">CSV, CAMT.053 oder MT940 aus dem Online-Banking. Die Kategorien setzt die App selbst.</div></div></div>' +
+    '<div class="klein leise">CSV, Excel, PDF, CAMT.053 oder MT940 aus dem Online-Banking. Die Kategorien setzt die App selbst.</div></div></div>' +
     '<div class="hilfe-schritt"><i class="nr">3</i><div><b>Konto von Hand anlegen</b>' +
     '<div class="klein leise">Für Bargeld, Tagesgeld oder einen Kredit – oder um den automatischen Abruf einzurichten.</div></div></div>' +
     '<div class="btn-reihe" style="margin-top:15px">' +
