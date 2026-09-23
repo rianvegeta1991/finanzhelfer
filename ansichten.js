@@ -61,10 +61,17 @@ function zeichneUmsaetze(){
 
     // Konten ganz oben: hier will man springen, nicht erst ein Fenster öffnen.
     // Ein Tipp zeigt nur dieses Konto, derselbe Tipp noch einmal wieder alle.
+    // „Alle" muss über *alle* Konten rechnen – vermoegen() folgt dem aktiven
+    // Filter und zeigte deshalb den Saldo des gerade gewählten Kontos.
+    const summeAlle = db.konten.reduce((s, k) => {
+      const b = Number(k.saldo) || 0;
+      return s + (kontoart(k.art).schuld ? -Math.abs(b) : b);
+    }, 0);
+
     const kontoLeiste = db.konten.length < 2 ? '' :
       '<div class="chips" style="padding-bottom:11px">' +
         '<button class="chip' + (filter.konten.length ? '' : ' an') + '" data-ktosprung="">' +
-          'Alle · ' + eur(vermoegen().liquide, true) + '</button>' +
+          'Alle · ' + eur(summeAlle, true) + '</button>' +
         db.konten.map((k) => {
           const an = filter.konten.length === 1 && filter.konten[0] === k.id;
           const schuld = kontoart(k.art).schuld;

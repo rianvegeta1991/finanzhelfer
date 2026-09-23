@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.7';
+const APP_VERSION = '1.8';
 
 const el = (id) => document.getElementById(id);
 function h(s){
@@ -206,8 +206,17 @@ function linieSvg(punkte){
   let s = '<defs><linearGradient id="verlauf-fl" x1="0" y1="0" x2="0" y2="1">' +
           '<stop offset="0%" stop-color="var(--akzent)" stop-opacity=".28"/>' +
           '<stop offset="100%" stop-color="var(--akzent)" stop-opacity="0"/></linearGradient></defs>';
+
+  // Beschriftete Gitterlinien: ohne sie sagt die Kurve nur „rauf und runter",
+  // aber nicht, um wie viel.
+  const stufe = skalaStufe(Math.max(Math.abs(max), Math.abs(min)) || 1);
+  for (let w = Math.ceil(min / stufe) * stufe; w <= max * 1.001; w += stufe){
+    const y = yVon(w);
+    s += '<line class="gitter" x1="' + links + '" y1="' + y.toFixed(1) + '" x2="' + (B - rechts) + '" y2="' + y.toFixed(1) + '"/>';
+    s += '<text x="' + (links + 2) + '" y="' + (y - 3).toFixed(1) + '">' + NF_EUR0.format(w).replace(/\s?€/, '') + '</text>';
+  }
   // Nulllinie nur zeigen, wenn sie im Bild liegt
-  if (min < 0) s += '<line class="gitter" x1="' + links + '" y1="' + yVon(0).toFixed(1) + '" x2="' + (B - rechts) + '" y2="' + yVon(0).toFixed(1) + '"/>';
+  if (min < 0) s += '<line class="achse" x1="' + links + '" y1="' + yVon(0).toFixed(1) + '" x2="' + (B - rechts) + '" y2="' + yVon(0).toFixed(1) + '"/>';
   s += '<path d="' + flaeche + '" fill="url(#verlauf-fl)"/>';
   s += '<path d="' + pfad + '" fill="none" stroke="var(--akzent)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>';
   const schritt = Math.max(1, Math.ceil(punkte.length / 6));
@@ -360,10 +369,30 @@ function zeichneUeberblick(){
   }
 
   /* Verlauf */
+  const kurve = verlaufPunkte(abschnitte);
+  const anfang = kurve.length ? kurve[0].wert : 0;
+  const jetzt = kurve.length ? kurve[kurve.length - 1].wert : 0;
+  // Nur tatsächlich erreichte Stände – die Null gehört in die Achse (das
+  // macht linieSvg selbst), nicht in die Kennzahl.
+  const werte = kurve.map((p) => p.wert);
+  const hoch = werte.length ? Math.max(...werte) : 0;
+  const tief = werte.length ? Math.min(...werte) : 0;
+  const aenderung = jetzt - anfang;
+
   html += '<div class="karte"><div class="karte-kopf"><h2>Verlauf des Guthabens</h2>' +
-    '<span class="mini">' + h(abschnitte.length + ' Abschnitte') + '</span></div>' +
-    linieSvg(verlaufPunkte(abschnitte)) +
-    '<div class="mini leise" style="margin-top:6px">Rückgerechnet aus dem heutigen Kontostand und den erfassten Buchungen.</div></div>';
+    '<span class="mini">' + h(kurve.length ? kurve[0].name + ' bis ' + kurve[kurve.length - 1].name : '') + '</span></div>' +
+    linieSvg(kurve) +
+    '<div class="kacheln" style="margin:13px 0 0">' +
+      kachel('Heute', eur(jetzt, true)) +
+      kachel('Veränderung', eurVz(aenderung, true), aenderung >= 0 ? 'plus' : 'minus') +
+      // Prozent nur, wenn der Ausgangswert eine sinnvolle Bezugsgröße ist
+      kachel(anfang > 0 ? 'davon in %' : 'Spanne',
+             anfang > 0 ? proz(aenderung / anfang * 100) : eur(hoch - tief, true),
+             anfang > 0 ? (aenderung >= 0 ? 'plus' : 'minus') : '') +
+    '</div>' +
+    '<div class="mini leise" style="margin-top:9px">Höchststand ' + eur(hoch, true) +
+    ', tiefster Stand ' + eur(tief, true) +
+    ' · rückgerechnet aus dem heutigen Kontostand und den erfassten Buchungen.</div></div>';
 
   /* Fixkosten */
   const vertraegeAktiv = db.vertraege.filter((x) => x.aktiv !== false);
