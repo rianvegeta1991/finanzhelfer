@@ -181,6 +181,19 @@ Gratisstufen pro Minute zählen.
 
 - **Der Service Worker liefert beim lokalen Testen alte Dateien** – siehe oben unter
   „Version". Das kostet sonst jedes Mal eine Viertelstunde Ratlosigkeit.
+- **`index.html` darf nie aus dem Cache kommen** (behoben in v1.12). Sie wird ohne
+  `?v=` gecacht; wer sie cache-first ausliefert, serviert nach jedem Update weiter
+  die alte Seite mit den alten `?v=`-Skripten – die App bleibt dann stehen, obwohl
+  die neue Fassung längst online ist. Genau das ist passiert. Für die Seite gilt
+  deshalb **network-first mit Cache als Rückfall**; offline ändert sich nichts.
+  Versionierte Skripte bleiben cache-first.
+- **Eine PWA merkt von einer neuen Fassung nichts von selbst.** Deshalb ruft
+  `swEinrichten()` beim Start und bei jedem `visibilitychange` `registration.update()`,
+  zeigt bei einem Fund `#update-balken`, und unter *Mehr → Nach Update suchen* liegt
+  `nachUpdateSuchen()`: holt `app.js?stand=<zeit>` am Cache vorbei (der SW lässt
+  `stand=` durch), vergleicht `APP_VERSION` und bietet `hartNeuladen()` an – SW
+  abmelden, Caches leeren, neu laden. Das rührt **nur Programmdateien** an; die Daten
+  liegen im `localStorage`.
 - **Zeilen in `.zeile` bestehen aus `<span>`.** `.tit`/`.sub`/`.betrag` brauchen deshalb
   `display:block`, sonst laufen Titel und Unterzeile ineinander und sprengen die Karte.
 - **Screenshots treffen oft die Overlay-Animation** und zeigen den Inhalt halb

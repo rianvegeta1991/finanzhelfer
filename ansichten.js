@@ -1098,6 +1098,8 @@ function zeichneMehr(){
         '<span class="tit">Welche Auszüge gehen?</span><span class="sub">CSV, Excel, PDF, CAMT.053, MT940</span></span></button>' +
       '<button class="zeile" data-tun="info:sicher"><span class="sym">🔒</span><span class="mitte">' +
         '<span class="tit">Wie sicher ist das?</span><span class="sub">Verschlüsselung und was sie nicht leistet</span></span></button>' +
+      '<button class="zeile" data-tun="update"><span class="sym">⬇️</span><span class="mitte">' +
+        '<span class="tit">Nach Update suchen</span><span class="sub">Holt die neueste Fassung – deine Daten bleiben</span></span></button>' +
       '</div>' +
       '<p class="mini leise" style="margin:12px 0 0;text-align:center">Version ' + APP_VERSION + '</p></div>';
 

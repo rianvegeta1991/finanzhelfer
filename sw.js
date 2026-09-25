@@ -1,19 +1,19 @@
 /* Finanzhelfer – Service Worker (Offline-Betrieb)
  * Bei Dateiänderungen die Versionsnummer hochzählen. */
-const CACHE = 'finanzhelfer-v12';
+const CACHE = 'finanzhelfer-v13';
 const ASSETS = [
   './',
   './index.html',
   // mit derselben Versionsnummer wie in index.html, sonst landen die
   // Skripte doppelt im Cache und die Seite holt sie trotzdem aus dem Netz
-  './daten.js?v=1.11',
-  './speicher.js?v=1.11',
-  './import.js?v=1.11',
-  './dateien.js?v=1.11',
-  './banking.js?v=1.11',
-  './kurse.js?v=1.11',
-  './ansichten.js?v=1.11',
-  './app.js?v=1.11',
+  './daten.js?v=1.12',
+  './speicher.js?v=1.12',
+  './import.js?v=1.12',
+  './dateien.js?v=1.12',
+  './banking.js?v=1.12',
+  './kurse.js?v=1.12',
+  './ansichten.js?v=1.12',
+  './app.js?v=1.12',
   './manifest.webmanifest',
   './icon.svg',
   './icon-maskable.svg',
@@ -48,6 +48,32 @@ self.addEventListener('fetch', (event) => {
   // Nur eigene Dateien bedienen. Kursabfragen, Wechselkurse und der Abruf über
   // eine eigene Brücke gehen immer direkt ins Netz – nie aus dem Cache.
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
+
+  // Die Versionsabfrage aus „Nach Update suchen“ muss am Cache vorbei.
+  if (url.searchParams.has('stand')) return;
+
+  // Die Seite selbst IMMER zuerst aus dem Netz holen.
+  //
+  // Vorher lief auch sie über den Cache – und weil index.html ohne
+  // Versionsnummer gecacht wird, bekam ein Besucher nach einem Update weiter
+  // die alte Seite mit den alten `?v=`-Skripten serviert. Die App blieb
+  // dadurch auf ihrem Stand stehen, obwohl längst eine neue Fassung online
+  // war. Erst der Netzversuch, dann der Cache: offline funktioniert es
+  // genauso wie vorher, online ist man sofort aktuell.
+  const istSeite = event.request.mode === 'navigate' ||
+    (event.request.headers.get('accept') || '').includes('text/html');
+  if (istSeite){
+    event.respondWith(
+      fetch(event.request).then((antwort) => {
+        if (antwort && antwort.ok){
+          const kopie = antwort.clone();
+          caches.open(CACHE).then((cache) => cache.put('./index.html', kopie));
+        }
+        return antwort;
+      }).catch(() => caches.match('./index.html').then((t) => t || caches.match('./')))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((treffer) => {

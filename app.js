@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.11';
+const APP_VERSION = '1.12';
 
 const el = (id) => document.getElementById(id);
 function h(s){
@@ -796,6 +796,7 @@ function tunAusfuehren(was){
     case 'vorschlag':    vorschlagUebernehmen(arg); break;
     case 'vorschlag-weg':vorschlagAblehnen(arg); break;
     case 'verlauf':      db.einst.verlaufReihe = arg; sichern(); neuZeichnen(); break;
+    case 'update':       nachUpdateSuchen(); break;
     case 'kurse':        kurseJetzt(); break;
     case 'abgleich':     abgleichJetzt(); break;
     case 'drucken':      berichtDrucken(); break;
@@ -905,9 +906,106 @@ function starten(){
     setTimeout(() => el('sp-pass').focus(), 150);
   }
 
-  if ('serviceWorker' in navigator){
-    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  swEinrichten();
+}
+
+/* ================= Aktualisierung =================
+ * Eine installierte PWA läuft aus ihrem eigenen Cache und merkt von einer
+ * neuen Fassung nichts, solange niemand nachfragt. Deshalb hier dreierlei:
+ * beim Start und bei jeder Rückkehr nachsehen, bei einem Fund einen Balken
+ * zeigen – und unter „Mehr“ einen Knopf, mit dem sich das von Hand auslösen
+ * lässt, falls doch einmal etwas klemmt. */
+let swReg = null;
+let updateGemeldet = false;
+
+function swEinrichten(){
+  // Das `?neu=…` aus hartNeuladen() hat seinen Zweck erfüllt, sobald die Seite
+  // steht – es soll nicht in Lesezeichen und Verlauf hängen bleiben.
+  if (/[?&]neu=/.test(location.search)){
+    try { history.replaceState(null, '', location.pathname); } catch (e){ /* egal */ }
   }
+  if (!('serviceWorker' in navigator)) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      swReg = reg;
+      reg.addEventListener('updatefound', () => {
+        const neu = reg.installing;
+        if (!neu) return;
+        neu.addEventListener('statechange', () => {
+          // `controller` gibt es nur, wenn schon eine Fassung lief – beim
+          // allerersten Besuch ist eine „neue Version“ keine Meldung wert.
+          if ((neu.state === 'installed' || neu.state === 'activated') && navigator.serviceWorker.controller){
+            updateBalken();
+          }
+        });
+      });
+      reg.update().catch(() => {});
+    }).catch(() => {});
+  });
+  // Zurück aus dem Hintergrund: erneut nachsehen. Genau dieser Fall – die PWA
+  // liegt tagelang offen – hat ein Update bisher am längsten aufgehalten.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && swReg) swReg.update().catch(() => {});
+  });
+}
+
+function updateBalken(){
+  if (updateGemeldet) return;
+  updateGemeldet = true;
+  const b = el('update-balken');
+  if (!b) return;
+  b.classList.add('auf');
+  el('upd-jetzt').onclick = () => location.reload();
+  el('upd-spaeter').onclick = () => b.classList.remove('auf');
+}
+
+/* Fragt beim Server nach, welche Fassung dort liegt – am Cache vorbei
+ * (`stand=` lässt der Service Worker durch). So steht im Dialog eine Zahl
+ * und nicht nur „müsste eigentlich“. */
+async function nachUpdateSuchen(){
+  toast('Sehe nach …');
+  let neueste = '';
+  try {
+    const r = await fetch('app.js?stand=' + Date.now(), { cache:'no-store' });
+    if (r.ok) neueste = ((await r.text()).match(/APP_VERSION\s*=\s*'([\d.]+)'/) || [])[1] || '';
+  } catch (e){ /* kein Netz */ }
+
+  if (!neueste){
+    infoZeigen('Kein Netz',
+      '<p class="klein leise">Der Server war nicht erreichbar. Die App läuft weiter aus ihrem Speicher – ' +
+      'versuch es später noch einmal.</p>');
+    return;
+  }
+  if (neueste === APP_VERSION){
+    infoZeigen('Alles aktuell',
+      '<p class="klein leise">Du hast Version ' + h(APP_VERSION) + ', und mehr gibt es gerade nicht.</p>' +
+      '<div class="btn-reihe"><button class="btn zweit" data-tun="ov-zu">Gut</button>' +
+      '<button class="btn zweit" id="upd-hart">Trotzdem neu laden</button></div>');
+  } else {
+    infoZeigen('Version ' + h(neueste) + ' ist da',
+      '<p class="klein leise">Du hast ' + h(APP_VERSION) + '. Beim Aktualisieren werden nur die Programmdateien ' +
+      'neu geholt – <b>deine Konten, Umsätze und Einstellungen bleiben unberührt</b>, die liegen woanders.</p>' +
+      '<div class="btn-reihe"><button class="btn zweit" data-tun="ov-zu">Später</button>' +
+      '<button class="btn" id="upd-hart">Jetzt aktualisieren</button></div>');
+  }
+  if (el('upd-hart')) el('upd-hart').onclick = () => hartNeuladen();
+}
+
+/* Der Holzhammer: Service Worker abmelden, alle Caches leeren, neu laden.
+ * Rührt nur die Programmdateien an – die Daten stehen im localStorage und
+ * bleiben, auch der Tresor. */
+async function hartNeuladen(){
+  toast('Hole die neue Fassung …');
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map((r) => r.unregister()));
+  } catch (e){ /* egal – dann eben nur der Cache */ }
+  try {
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => caches.delete(k)));
+  } catch (e){ /* egal */ }
+  sichernJetzt();
+  location.replace(location.pathname + '?neu=' + Date.now());
 }
 
 /* Läuft, sobald ein Bestand offen ist – nach dem Laden oder nach dem Entsperren. */

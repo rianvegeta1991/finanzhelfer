@@ -254,6 +254,17 @@ main{padding:4px 16px 28px;max-width:760px;margin:0 auto}
 }
 #toast.auf{opacity:1;transform:translate(-50%,0)}
 
+/* ---------- Update-Balken ---------- */
+#update-balken{
+  position:fixed;left:12px;right:12px;bottom:calc(88px + env(safe-area-inset-bottom));
+  display:none;align-items:center;gap:9px;flex-wrap:wrap;
+  background:var(--karte);border:1px solid var(--akzent);border-radius:14px;
+  padding:11px 13px;font-size:13.5px;z-index:82;box-shadow:0 8px 24px rgba(0,0,0,.35);
+}
+#update-balken.auf{display:flex}
+#update-balken span{flex:1 1 auto;min-width:120px}
+#update-balken .btn{flex:none;padding:7px 13px;font-size:13px}
+
 /* ---------- Fortschritt ---------- */
 .fortschritt{height:5px;border-radius:3px;background:var(--rand);overflow:hidden;margin-top:9px}
 .fortschritt i{display:block;height:100%;background:var(--akzent);transition:width .25s}
@@ -405,16 +416,23 @@ main{padding:4px 16px 28px;max-width:760px;margin:0 auto}
 
 <div id="toast" role="status" aria-live="polite"></div>
 
+<!-- Meldung, wenn der Service Worker eine neue Fassung geholt hat -->
+<div id="update-balken" role="status">
+  <span>Eine neue Version ist da.</span>
+  <button class="btn" id="upd-jetzt">Neu laden</button>
+  <button class="btn zweit" id="upd-spaeter">Später</button>
+</div>
+
 <!-- Druckansicht: wird vor dem Drucken aus dem aktuellen Zeitraum gefüllt -->
 <div id="bericht"></div>
 
-<script src="daten.js?v=1.11"></script>
-<script src="speicher.js?v=1.11"></script>
-<script src="import.js?v=1.11"></script>
-<script src="dateien.js?v=1.11"></script>
-<script src="banking.js?v=1.11"></script>
-<script src="kurse.js?v=1.11"></script>
-<script src="ansichten.js?v=1.11"></script>
-<script src="app.js?v=1.11"></script>
+<script src="daten.js?v=1.12"></script>
+<script src="speicher.js?v=1.12"></script>
+<script src="import.js?v=1.12"></script>
+<script src="dateien.js?v=1.12"></script>
+<script src="banking.js?v=1.12"></script>
+<script src="kurse.js?v=1.12"></script>
+<script src="ansichten.js?v=1.12"></script>
+<script src="app.js?v=1.12"></script>
 </body>
 </html>
