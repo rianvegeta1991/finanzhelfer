@@ -221,4 +221,5 @@ der hilft – ein Python-Traceback im Überblick hilft niemandem.
 
 Die Trade-Republic-Anmeldung läuft nach wenigen Tagen ab und lässt sich **nicht**
 automatisch erneuern (pytr fragt nach einem Code). Der Nutzer führt dann
-`finanzhelfer-bruecke anmelden tr` selbst aus.
+`.nmelden.ps1 tr` im Brücken-Ordner selbst aus – der bloße Befehlsname
+funktioniert nicht, die exe liegt nicht im PATH.

@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.13';
+const APP_VERSION = '1.14';
 
 const el = (id) => document.getElementById(id);
 function h(s){
@@ -414,8 +414,11 @@ function zeichneUeberblick(){
         '<span class="tit">' + h(p.name) + '</span>' +
         '<span class="sub">' + h(p.kurz) +
         (p.stand ? ' Letzter Abruf: ' + h(datumLang(p.stand)) + '.' : '') +
-        (p.anmelden ? ' Dafür einmal im Terminal <code>finanzhelfer-bruecke anmelden ' + h(p.konto) +
-                      '</code> ausführen.' : '') +
+        // Der bloße Befehlsname führt in die Irre: „anmelden“ ist ein Argument
+        // der Brücke, kein eigenes Programm, und die exe liegt nicht im PATH.
+        // Genau so getippt kommt nur „CommandNotFoundException“ zurück.
+        (p.anmelden ? ' Dafür im Ordner der Brücke <code>.\\anmelden.ps1 ' + h(p.konto) +
+                      '</code> ausführen – in einem eigenen Terminal, es fragt nach deinem Code.' : '') +
         '</span></span></div>').join('') + '</div>' +
       '<p class="hinw" style="margin-top:8px">Bis dahin zeigt die App für diese Quelle den letzten bekannten ' +
       'Stand – die Zahlen stimmen also, sind aber nicht mehr aktuell.</p></div>';

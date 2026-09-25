@@ -1178,8 +1178,9 @@ async function abgleichJetzt(){
         '<p class="klein"><b>' + h(p.name) + '</b> – ' + h(p.kurz) +
         (p.stand ? ' Letzter erfolgreicher Abruf: ' + h(datumLang(p.stand)) + '.' : '') +
         (p.anmelden
-          ? '<br>Dafür einmal im Terminal <code>finanzhelfer-bruecke anmelden ' + h(p.konto) +
-            '</code> ausführen und den Code eintippen, den du bekommst.'
+          ? '<br>Dafür im Ordner der Brücke <code>.\\anmelden.ps1 ' + h(p.konto) + '</code> ausführen ' +
+            'und den Code eintippen, den du bekommst. Das muss ein eigenes Terminal sein – ein ' +
+            'Hintergrunddienst hat keine Tastatur, daran scheitert es ja gerade.'
           : '') + '</p>').join(''));
   } else {
     toast(b.neu + ' neue Buchungen aus ' + b.konten + ' Konten');
