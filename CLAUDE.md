@@ -208,3 +208,17 @@ Verifizieren statt hoffen: Server starten (`preview_start`), im mobilen Viewport
 (375×812) prüfen, Konsole auf Fehler checken, Zustand per DOM auslesen. Parser und
 Verschlüsselung lassen sich direkt über `javascript_tool` prüfen – `impCsvLesen`,
 `impCamt`, `impMt940`, `sperreEinrichten`/`entsperren` sind alle global.
+
+## Wenn eine Quelle klemmt
+
+Die Brücke liefert bei einem gescheiterten Abruf **weiter ihren letzten guten
+Stand** – sonst wäre bei jedem Aussetzer alles weg. Der Haken: die App merkte
+davon nichts und zeigte tagelang alte Zahlen. Deshalb holt sie seit v1.13 nach
+jedem Abgleich `/status` (`brueckeStatusHolen`, Ergebnis in `brueckeLage`) und
+zeigt Quellen mit Fehler oder älter als drei Tage oben im Überblick an.
+`brueckeFehlerKlartext` übersetzt den rohen Fehler in einen Satz mit dem Befehl,
+der hilft – ein Python-Traceback im Überblick hilft niemandem.
+
+Die Trade-Republic-Anmeldung läuft nach wenigen Tagen ab und lässt sich **nicht**
+automatisch erneuern (pytr fragt nach einem Code). Der Nutzer führt dann
+`finanzhelfer-bruecke anmelden tr` selbst aus.

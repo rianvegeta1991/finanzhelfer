@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.12';
+const APP_VERSION = '1.13';
 
 const el = (id) => document.getElementById(id);
 function h(s){
@@ -401,6 +401,25 @@ function zeichneUeberblick(){
       '<button class="btn zweit" data-tun="nav:mehr">Konten verwalten</button>' +
       '<button class="btn zweit" data-tun="import">Auszug einlesen</button>' +
     '</div></div>';
+
+  /* Klemmt eine Quelle, gehört das nach ganz oben – und nicht in die Konsole.
+   * Solange nichts gemeldet ist, steht hier auch nichts. */
+  const probleme = (typeof brueckeProbleme === 'function') ? brueckeProbleme() : [];
+  if (probleme.length){
+    html += '<div class="kasten warnung"><b>' +
+      (probleme.length === 1 ? probleme[0].name + ' wird nicht mehr abgerufen'
+                             : probleme.length + ' Quellen werden nicht mehr abgerufen') + '</b>' +
+      '<div class="liste" style="margin-top:4px">' + probleme.map((p) =>
+        '<div class="zeile lang"><span class="sym">⚠️</span><span class="mitte">' +
+        '<span class="tit">' + h(p.name) + '</span>' +
+        '<span class="sub">' + h(p.kurz) +
+        (p.stand ? ' Letzter Abruf: ' + h(datumLang(p.stand)) + '.' : '') +
+        (p.anmelden ? ' Dafür einmal im Terminal <code>finanzhelfer-bruecke anmelden ' + h(p.konto) +
+                      '</code> ausführen.' : '') +
+        '</span></span></div>').join('') + '</div>' +
+      '<p class="hinw" style="margin-top:8px">Bis dahin zeigt die App für diese Quelle den letzten bekannten ' +
+      'Stand – die Zahlen stimmen also, sind aber nicht mehr aktuell.</p></div>';
+  }
 
   /* Kacheln */
   html += '<div class="kacheln">' +

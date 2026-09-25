@@ -147,6 +147,57 @@ async function brueckeUmsaetze(cfg, konto){
   })).filter((u) => u.datum);
 }
 
+/* ---------- Lagebericht der Brücke ----------
+ * Scheitert ein Abruf, liefert die Brücke weiter ihren letzten guten Stand –
+ * aus gutem Grund, sonst wäre bei jedem Aussetzer alles weg. Der Haken: die
+ * App merkt davon nichts und zeigt tagelang alte Zahlen, ohne ein Wort zu
+ * sagen. Genau das ist mit Trade Republic passiert. `/status` nennt je Quelle
+ * den letzten Stand und den Fehler – das wird hier geholt und im Überblick
+ * angezeigt. */
+let brueckeLage = [];
+
+async function brueckeStatusHolen(){
+  const cfg = db.einst.bruecke;
+  if (!cfg || !cfg.basis){ brueckeLage = []; return brueckeLage; }
+  try {
+    brueckeLage = await brueckeHolen(cfg, '/status');
+  } catch (e){
+    brueckeLage = [];        // ältere Brücken kennen /status nicht – kein Drama
+  }
+  return brueckeLage;
+}
+
+/* Aus dem rohen Fehler einen Satz machen, der sagt, was zu tun ist. Ein
+ * Python-Traceback im Überblick hilft niemandem weiter. */
+function brueckeFehlerKlartext(text){
+  const t = String(text || '');
+  if (/EOF when reading a line|input\(|Code:/.test(t))
+    return { kurz:'Die Anmeldung ist abgelaufen – sie braucht einmal deinen Bestätigungscode.', anmelden:true };
+  if (/system_id/i.test(t))
+    return { kurz:'Die einmalige Anmeldung fehlt oder ist verloren gegangen.', anmelden:true };
+  if (/\b429\b|too many|rate limit/i.test(t))
+    return { kurz:'Zu viele Versuche – die Bank bremst gerade. In ein paar Stunden noch einmal.', anmelden:false };
+  if (/9952/.test(t))
+    return { kurz:'Die Bank kennt die Produkt-ID noch nicht.', anmelden:false };
+  if (/9010|9800|PIN|gesperrt/i.test(t))
+    return { kurz:'Die Bank hat die Anmeldung abgelehnt – PIN prüfen, bevor du es noch einmal versuchst.', anmelden:false };
+  return { kurz: t.split(/[\n\r]|\s\/\s/)[0].trim().slice(0, 140) || 'Unbekannter Fehler.', anmelden:false };
+}
+
+/* Quellen, die klemmen: mit Fehler, oder seit drei Tagen stumm. */
+function brueckeProbleme(){
+  const grenze = tageAddieren(heute(), -3);
+  return (brueckeLage || []).map((z) => {
+    const stand = z.stand ? String(z.stand).slice(0, 10) : '';
+    const stumm = !stand || stand < grenze;
+    if (!z.fehler && !stumm) return null;
+    const k = z.fehler ? brueckeFehlerKlartext(z.fehler)
+                       : { kurz:'Meldet sich seit ' + (stand ? datumKurz(stand) + ausIso(stand).getFullYear() : 'Beginn') +
+                                ' nicht mehr.', anmelden:false };
+    return { name: z.name || z.konto, konto: z.konto, stand, kurz: k.kurz, anmelden: k.anmelden };
+  }).filter(Boolean);
+}
+
 /* Ein Konto abgleichen: Saldo und neue Buchungen. */
 async function kontoAbgleichen(konto){
   if (konto.dienst !== 'bruecke') throw new Error('Für dieses Konto ist kein automatischer Abruf eingerichtet.');
@@ -207,12 +258,19 @@ async function brueckeAlleHolen(){
     } catch (e){ bericht.fehler.push(d.name + ': ' + e.message); }
   }
 
+  // Immer nachfragen, wie es der Brücke geht – auch wenn oben alles glatt
+  // lief. Ein abgelaufener Zugang fällt hier sonst nicht auf: die Brücke
+  // liefert dann klaglos ihren letzten guten Stand.
+  await brueckeStatusHolen();
+
   if (bericht.fehler.length) console.warn('[Brücke]', bericht.fehler.join(' | '));
   if (bericht.positionen) depotStandFesthalten();   // taeglicher Eintrag in den Wertverlauf
   if (bericht.neu || bericht.positionen){
     sichern();
-    if (typeof neuZeichnen === 'function') neuZeichnen();
   }
+  // Auch ohne neue Buchungen neu zeichnen: der Lagebericht kann eine Warnung
+  // mitgebracht haben, die niemand sieht, wenn die Ansicht stehen bleibt.
+  if (typeof neuZeichnen === 'function') neuZeichnen();
   return bericht;
 }
 

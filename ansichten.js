@@ -1162,11 +1162,25 @@ function zeichneMehr(){
 async function abgleichJetzt(){
   toast('Rufe Konten ab …');
   const b = await alleAbgleichen();
+  // Ein sauber durchgelaufener Abruf heißt noch nicht, dass die Brücke auch
+  // frische Daten hatte – deshalb immer den Lagebericht dazuholen.
+  await brueckeStatusHolen();
   neuZeichnen();
-  if (b.fehler.length){
-    infoZeigen('Abruf teils fehlgeschlagen',
+
+  const probleme = brueckeProbleme();
+  if (b.fehler.length || probleme.length){
+    infoZeigen(b.fehler.length ? 'Abruf teils fehlgeschlagen' : 'Eine Quelle hängt',
       '<p class="klein">' + b.konten + ' Konten abgerufen, ' + b.neu + ' neue Buchungen.</p>' +
-      '<ul class="klein leise">' + b.fehler.map((f) => '<li>' + h(f) + '</li>').join('') + '</ul>');
+      (b.fehler.length
+        ? '<ul class="klein leise">' + b.fehler.map((f) => '<li>' + h(f) + '</li>').join('') + '</ul>'
+        : '') +
+      probleme.map((p) =>
+        '<p class="klein"><b>' + h(p.name) + '</b> – ' + h(p.kurz) +
+        (p.stand ? ' Letzter erfolgreicher Abruf: ' + h(datumLang(p.stand)) + '.' : '') +
+        (p.anmelden
+          ? '<br>Dafür einmal im Terminal <code>finanzhelfer-bruecke anmelden ' + h(p.konto) +
+            '</code> ausführen und den Code eintippen, den du bekommst.'
+          : '') + '</p>').join(''));
   } else {
     toast(b.neu + ' neue Buchungen aus ' + b.konten + ' Konten');
   }
