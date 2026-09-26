@@ -173,12 +173,16 @@ function brueckeFehlerKlartext(text){
   const t = String(text || '');
   if (/EOF when reading a line|input\(|Code:/.test(t))
     return { kurz:'Die Anmeldung ist abgelaufen – sie braucht einmal deinen Bestätigungscode.', anmelden:true };
-  if (/system_id/i.test(t))
-    return { kurz:'Die einmalige Anmeldung fehlt oder ist verloren gegangen.', anmelden:true };
+  // 9952 vor system_id prüfen: weist die Bank die Produkt-ID ab, kommt gar
+  // kein Dialog zustande, und python-fints meldet als Folge davon eine
+  // fehlende Kundensystem-ID. Andersherum geprüft schickt man den Nutzer zu
+  // einer Anmeldung, die nichts ändern kann.
+  if (/9952|Produkt-ID|Kundenprodukt/.test(t))
+    return { kurz:'Die Bank lehnt die Produkt-ID ab – das liegt an ihrer Freischaltung, nicht an dir.', anmelden:false };
   if (/\b429\b|too many|rate limit/i.test(t))
     return { kurz:'Zu viele Versuche – die Bank bremst gerade. In ein paar Stunden noch einmal.', anmelden:false };
-  if (/9952/.test(t))
-    return { kurz:'Die Bank kennt die Produkt-ID noch nicht.', anmelden:false };
+  if (/system_id/i.test(t))
+    return { kurz:'Die einmalige Anmeldung fehlt oder ist verloren gegangen.', anmelden:true };
   if (/9010|9800|PIN|gesperrt/i.test(t))
     return { kurz:'Die Bank hat die Anmeldung abgelehnt – PIN prüfen, bevor du es noch einmal versuchst.', anmelden:false };
   return { kurz: t.split(/[\n\r]|\s\/\s/)[0].trim().slice(0, 140) || 'Unbekannter Fehler.', anmelden:false };
