@@ -223,3 +223,14 @@ Die Trade-Republic-Anmeldung läuft nach wenigen Tagen ab und lässt sich **nich
 automatisch erneuern (pytr fragt nach einem Code). Der Nutzer führt dann
 `.nmelden.ps1 tr` im Brücken-Ordner selbst aus – der bloße Befehlsname
 funktioniert nicht, die exe liegt nicht im PATH.
+
+### „Konten abrufen" stößt die Brücke an
+
+`abgleichJetzt` ruft zuerst `brueckeAnstossen()` (`GET /abgleich`), damit die
+Brücke wirklich bei den Banken nachfragt, und holt erst danach bei ihr ab.
+Ohne den ersten Schritt bekäme man nur den Stand, der dort zufällig herumlag –
+nach einer erneuerten Anmeldung also weiter den alten. Kennt die Brücke
+`/abgleich` nicht, bleibt es stillschweigend beim alten Ablauf.
+
+Beim **Start** wird das bewusst nicht gemacht: sonst klopfte jeder App-Start
+bei allen Banken an.

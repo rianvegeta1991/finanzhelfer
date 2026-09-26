@@ -1160,11 +1160,18 @@ function zeichneMehr(){
 }
 
 async function abgleichJetzt(){
+  // Erst die Brücke bei den Banken nachfragen lassen, dann bei ihr. Ohne den
+  // ersten Schritt holte die App nur den Stand ab, den die Brücke zufällig
+  // gerade herumliegen hatte – nach einer erneuerten Anmeldung also weiter
+  // den alten.
+  toast('Die Brücke fragt bei den Banken nach …');
+  const frisch = await brueckeAnstossen();
+
   toast('Rufe Konten ab …');
   const b = await alleAbgleichen();
   // Ein sauber durchgelaufener Abruf heißt noch nicht, dass die Brücke auch
   // frische Daten hatte – deshalb immer den Lagebericht dazuholen.
-  await brueckeStatusHolen();
+  if (!frisch) await brueckeStatusHolen();
   neuZeichnen();
 
   const probleme = brueckeProbleme();

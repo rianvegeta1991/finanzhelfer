@@ -167,6 +167,23 @@ async function brueckeStatusHolen(){
   return brueckeLage;
 }
 
+/* Die Brücke sofort abgleichen lassen, statt auf ihren Takt zu warten.
+ *
+ * Sie holt von sich aus alle drei Stunden. Nach einer erneuerten Anmeldung ist
+ * das eine Ewigkeit: bis dahin stünde in der App weiter die alte Warnung,
+ * obwohl längst alles in Ordnung ist. Liefert `true`, wenn die Brücke es
+ * konnte – ältere kennen `/abgleich` nicht, dann bleibt es beim alten Ablauf. */
+async function brueckeAnstossen(){
+  const cfg = db.einst.bruecke;
+  if (!cfg || !cfg.basis) return false;
+  try {
+    brueckeLage = await brueckeHolen(cfg, '/abgleich');
+    return true;
+  } catch (e){
+    return false;
+  }
+}
+
 /* Aus dem rohen Fehler einen Satz machen, der sagt, was zu tun ist. Ein
  * Python-Traceback im Überblick hilft niemandem weiter. */
 function brueckeFehlerKlartext(text){

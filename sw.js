@@ -1,19 +1,19 @@
 /* Finanzhelfer – Service Worker (Offline-Betrieb)
  * Bei Dateiänderungen die Versionsnummer hochzählen. */
-const CACHE = 'finanzhelfer-v16';
+const CACHE = 'finanzhelfer-v17';
 const ASSETS = [
   './',
   './index.html',
   // mit derselben Versionsnummer wie in index.html, sonst landen die
   // Skripte doppelt im Cache und die Seite holt sie trotzdem aus dem Netz
-  './daten.js?v=1.15',
-  './speicher.js?v=1.15',
-  './import.js?v=1.15',
-  './dateien.js?v=1.15',
-  './banking.js?v=1.15',
-  './kurse.js?v=1.15',
-  './ansichten.js?v=1.15',
-  './app.js?v=1.15',
+  './daten.js?v=1.16',
+  './speicher.js?v=1.16',
+  './import.js?v=1.16',
+  './dateien.js?v=1.16',
+  './banking.js?v=1.16',
+  './kurse.js?v=1.16',
+  './ansichten.js?v=1.16',
+  './app.js?v=1.16',
   './manifest.webmanifest',
   './icon.svg',
   './icon-maskable.svg',
