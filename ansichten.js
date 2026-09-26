@@ -1174,7 +1174,9 @@ async function abgleichJetzt(){
   if (!frisch) await brueckeStatusHolen();
   neuZeichnen();
 
-  const probleme = brueckeProbleme();
+  // Weggedrücktes bleibt auch hier weg – sonst käme bei jedem Abruf wieder
+  // ein Fenster hoch, das man gerade erst zum Schweigen gebracht hat.
+  const probleme = brueckeProblemeGeteilt().offen;
   if (b.fehler.length || probleme.length){
     infoZeigen(b.fehler.length ? 'Abruf teils fehlgeschlagen' : 'Eine Quelle hängt',
       '<p class="klein">' + b.konten + ' Konten abgerufen, ' + b.neu + ' neue Buchungen.</p>' +
@@ -1185,7 +1187,7 @@ async function abgleichJetzt(){
         '<p class="klein"><b>' + h(p.name) + '</b> – ' + h(p.kurz) +
         (p.stand ? ' Letzter erfolgreicher Abruf: ' + h(datumLang(p.stand)) + '.' : '') +
         (p.anmelden
-          ? '<br>Dafür im Ordner der Brücke <code>.\\anmelden.ps1 ' + h(p.konto) + '</code> ausführen ' +
+          ? '<br>Dafür im Ordner der Brücke <code>.\\anmelden.cmd ' + h(p.konto) + '</code> ausführen ' +
             'und den Code eintippen, den du bekommst. Das muss ein eigenes Terminal sein – ein ' +
             'Hintergrunddienst hat keine Tastatur, daran scheitert es ja gerade.'
           : '') + '</p>').join(''));

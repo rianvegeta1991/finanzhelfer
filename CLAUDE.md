@@ -234,3 +234,17 @@ nach einer erneuerten Anmeldung also weiter den alten. Kennt die Brücke
 
 Beim **Start** wird das bewusst nicht gemacht: sonst klopfte jeder App-Start
 bei allen Banken an.
+
+### Warnungen wegdrücken
+
+Jede Brücken-Warnung hat ein × (`warn-weg`), die Kennung steht in
+`db.versteckt`. Drei Eigenschaften, die so bleiben müssen:
+
+1. Die Signatur ist **Quelle + Art des Fehlers**. Wird aus „Anmeldung
+   abgelaufen" später „Zugang gesperrt", meldet sich die Warnung wieder –
+   sonst drückt man einmal weg und übersieht danach ein echtes Problem.
+2. `brueckeProblemeGeteilt()` **räumt auf**: was nicht mehr gemeldet wird,
+   fliegt aus `versteckt`. Kommt dasselbe Problem später zurück, warnt es neu.
+3. Weggedrücktes verschwindet **nicht spurlos** – eine dünne Zeile
+   („1 Hinweis ausgeblendet · wieder zeigen") bleibt stehen. Eine Warnung, die
+   man vollständig zum Schweigen bringt, ist genau die, die man später vermisst.

@@ -34,6 +34,7 @@ function leereDb(){
     depotVerlauf: [],  // taeglicher Depotwert, siehe depotStandFesthalten()
     regeln: [],          // eigene Kategorie-Regeln des Nutzers, stechen REGELN
     erledigt: [],        // abgelehnte Vertragsvorschläge (Signaturen), damit sie nicht wiederkommen
+    versteckt: [],       // weggedrückte Brücken-Warnungen, siehe brueckeProblemeGeteilt()
     einst: {
       kursKey: '',       // Schlüssel für die Marktdaten-API
       kursDienst: 'twelvedata',
@@ -69,7 +70,7 @@ function pruefeDb(d){
   const leer = leereDb();
   const fertig = Object.assign(leer, d || {});
   fertig.einst = Object.assign(leer.einst, (d && d.einst) || {});
-  ['konten','umsaetze','depots','positionen','vertraege','regeln','erledigt','depotVerlauf'].forEach((f) => {
+  ['konten','umsaetze','depots','positionen','vertraege','regeln','erledigt','depotVerlauf','versteckt'].forEach((f) => {
     if (!Array.isArray(fertig[f])) fertig[f] = [];
   });
   return fertig;

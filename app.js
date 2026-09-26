@@ -2,7 +2,7 @@
  * Die einzelnen Bereiche (Umsätze, Depot, Verträge, Mehr) stehen in ansichten.js.
  * Alles global, damit sich die beiden Dateien gegenseitig aufrufen können. */
 
-const APP_VERSION = '1.16';
+const APP_VERSION = '1.17';
 
 const el = (id) => document.getElementById(id);
 function h(s){
@@ -404,12 +404,13 @@ function zeichneUeberblick(){
 
   /* Klemmt eine Quelle, gehört das nach ganz oben – und nicht in die Konsole.
    * Solange nichts gemeldet ist, steht hier auch nichts. */
-  const probleme = (typeof brueckeProbleme === 'function') ? brueckeProbleme() : [];
-  if (probleme.length){
+  const lage = (typeof brueckeProblemeGeteilt === 'function')
+    ? brueckeProblemeGeteilt() : { offen:[], verborgen:[] };
+  if (lage.offen.length){
     html += '<div class="kasten warnung"><b>' +
-      (probleme.length === 1 ? probleme[0].name + ' wird nicht mehr abgerufen'
-                             : probleme.length + ' Quellen werden nicht mehr abgerufen') + '</b>' +
-      '<div class="liste" style="margin-top:4px">' + probleme.map((p) =>
+      (lage.offen.length === 1 ? lage.offen[0].name + ' wird nicht mehr abgerufen'
+                               : lage.offen.length + ' Quellen werden nicht mehr abgerufen') + '</b>' +
+      '<div class="liste" style="margin-top:4px">' + lage.offen.map((p) =>
         '<div class="zeile lang"><span class="sym">⚠️</span><span class="mitte">' +
         '<span class="tit">' + h(p.name) + '</span>' +
         '<span class="sub">' + h(p.kurz) +
@@ -417,11 +418,24 @@ function zeichneUeberblick(){
         // Der bloße Befehlsname führt in die Irre: „anmelden“ ist ein Argument
         // der Brücke, kein eigenes Programm, und die exe liegt nicht im PATH.
         // Genau so getippt kommt nur „CommandNotFoundException“ zurück.
-        (p.anmelden ? ' Dafür im Ordner der Brücke <code>.\\anmelden.ps1 ' + h(p.konto) +
+        (p.anmelden ? ' Dafür im Ordner der Brücke <code>.\\anmelden.cmd ' + h(p.konto) +
                       '</code> ausführen – in einem eigenen Terminal, es fragt nach deinem Code.' : '') +
-        '</span></span></div>').join('') + '</div>' +
+        '</span></span>' +
+        '<button class="weg-x" data-tun="warn-weg:' + h(p.sig) + '" ' +
+        'title="Diesen Hinweis ausblenden" aria-label="Hinweis zu ' + h(p.name) + ' ausblenden">×</button>' +
+        '</div>').join('') + '</div>' +
       '<p class="hinw" style="margin-top:8px">Bis dahin zeigt die App für diese Quelle den letzten bekannten ' +
-      'Stand – die Zahlen stimmen also, sind aber nicht mehr aktuell.</p></div>';
+      'Stand – die Zahlen stimmen also, sind aber nicht mehr aktuell. Mit × verschwindet der Hinweis, ' +
+      'bis sich die Lage ändert.</p></div>';
+  }
+  // Weggedrücktes verschwindet nicht spurlos: eine dünne Zeile bleibt stehen.
+  // Eine Warnung, die man vollständig zum Schweigen bringt, ist genau die,
+  // die man später vermisst.
+  if (lage.verborgen.length){
+    html += '<p class="mini leise" style="margin:-4px 0 13px;display:flex;gap:8px;align-items:center">' +
+      h(lage.verborgen.length === 1 ? '1 Hinweis ausgeblendet (' + lage.verborgen[0].name + ')'
+                                    : lage.verborgen.length + ' Hinweise ausgeblendet') +
+      '<button class="mini" data-tun="warn-zeigen" style="color:var(--akzent);font-weight:600">wieder zeigen</button></p>';
   }
 
   /* Kacheln */
@@ -819,6 +833,8 @@ function tunAusfuehren(was){
     case 'vorschlag-weg':vorschlagAblehnen(arg); break;
     case 'verlauf':      db.einst.verlaufReihe = arg; sichern(); neuZeichnen(); break;
     case 'update':       nachUpdateSuchen(); break;
+    case 'warn-weg':     warnVerstecken(arg); break;
+    case 'warn-zeigen':  warnWiederZeigen(); break;
     case 'kurse':        kurseJetzt(); break;
     case 'abgleich':     abgleichJetzt(); break;
     case 'drucken':      berichtDrucken(); break;

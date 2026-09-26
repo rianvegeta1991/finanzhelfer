@@ -215,8 +215,42 @@ function brueckeProbleme(){
     const k = z.fehler ? brueckeFehlerKlartext(z.fehler)
                        : { kurz:'Meldet sich seit ' + (stand ? datumKurz(stand) + ausIso(stand).getFullYear() : 'Beginn') +
                                 ' nicht mehr.', anmelden:false };
-    return { name: z.name || z.konto, konto: z.konto, stand, kurz: k.kurz, anmelden: k.anmelden };
+    // Die Kennung hängt an der Quelle **und** an der Art des Fehlers: wird
+    // daraus später ein anderer, meldet sich die Warnung wieder – sonst
+    // drückt man einmal weg und übersieht danach ein echtes Problem.
+    return { name: z.name || z.konto, konto: z.konto, stand, kurz: k.kurz, anmelden: k.anmelden,
+             sig: z.konto + '|' + k.kurz.slice(0, 60) };
   }).filter(Boolean);
+}
+
+/* Trennt in „zeigen" und „weggedrückt".
+ *
+ * Räumt dabei auf: was gar nicht mehr gemeldet wird, braucht auch nicht mehr
+ * versteckt zu werden. Sonst bliebe ein alter Eintrag liegen und würde
+ * dieselbe Warnung später stumm schalten, obwohl sie neu ist. */
+function brueckeProblemeGeteilt(){
+  const alle = brueckeProbleme();
+  const gemeldet = new Set(alle.map((p) => p.sig));
+  if (Array.isArray(db.versteckt) && db.versteckt.length){
+    const bereinigt = db.versteckt.filter((v) => gemeldet.has(v.sig));
+    if (bereinigt.length !== db.versteckt.length){ db.versteckt = bereinigt; sichern(); }
+  }
+  const weg = new Set((db.versteckt || []).map((v) => v.sig));
+  return { offen: alle.filter((p) => !weg.has(p.sig)),
+           verborgen: alle.filter((p) => weg.has(p.sig)) };
+}
+
+function warnVerstecken(sig){
+  if (!Array.isArray(db.versteckt)) db.versteckt = [];
+  if (sig && !db.versteckt.some((v) => v.sig === sig)) db.versteckt.push({ sig, seit: heute() });
+  sichern();
+  neuZeichnen();
+}
+
+function warnWiederZeigen(){
+  db.versteckt = [];
+  sichern();
+  neuZeichnen();
 }
 
 /* Ein Konto abgleichen: Saldo und neue Buchungen. */
